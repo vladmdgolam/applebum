@@ -540,12 +540,12 @@ impl Default for Settings {
             library_sort: std::collections::BTreeMap::new(),
             library_by_you: false,
             zoom: 1.0,
-            // This app opens as the classic player.
-            winamp_window: true,
+            // This app opens as the classic player. Tests exercise the main window.
+            winamp_window: cfg!(not(test)) && cfg!(not(feature = "demo")),
             winamp_show_taskbar: true,
             custom_titlebar: false,
             // `None` is the built-in classic Winamp skin.
-            skin: None,
+            skin: if cfg!(test) { Some(crate::skin::WIDE.to_owned()) } else { None },
             random_skin: false,
             skin_scale: None,
             winamp_on_top: false,

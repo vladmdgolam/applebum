@@ -309,7 +309,7 @@ fn liked_entry(app: &App) -> Entry {
     Entry {
         image: None,
         grid_image: None,
-        name: gettext(app.locale, "Liked Songs").into_owned(),
+        name: gettext(app.locale, "Library Songs").into_owned(),
         subtitle,
         grid_subtitle,
         page: Page::LikedSongs,
@@ -2877,7 +2877,7 @@ mod ordering_tests {
             rows(&app),
             expected(&[
                 ("Beta", 0),
-                ("Liked Songs", 0),
+                ("Library Songs", 0),
                 ("Outer", 0),
                 ("Inner", 1),
                 ("Alpha", 2),
@@ -2891,7 +2891,7 @@ mod ordering_tests {
             expected(&[
                 ("Alpha", 0),
                 ("Beta", 0),
-                ("Liked Songs", 0),
+                ("Library Songs", 0),
                 ("Outer", 0),
                 ("Inner", 1),
                 ("alpha", 2),

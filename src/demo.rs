@@ -2314,7 +2314,7 @@ mod tests {
         let (ctx, mut app) = accessible_app("navigate");
         accessible_frame(&ctx, &mut app, vec![]);
         let tree = accessible_frame(&ctx, &mut app, vec![]);
-        let liked = accessible_node(&tree, "Liked Songs", Role::Button);
+        let liked = accessible_node(&tree, "Library Songs", Role::Button);
         accessible_frame(
             &ctx,
             &mut app,
@@ -2562,7 +2562,7 @@ mod tests {
         );
         assert!(app.settings.library_by_you);
         let tree = accessible_frame(&ctx, &mut app, vec![]);
-        accessible_node(&tree, "Liked Songs", Role::Button);
+        accessible_node(&tree, "Library Songs", Role::Button);
         accessible_node(&tree, "Late night focus", Role::Button);
         assert!(
             !tree
@@ -2618,7 +2618,7 @@ mod tests {
             accessible_node(&tree, &gettext(locale, "Create a playlist"), Role::Button);
             accessible_node(&tree, &gettext(locale, "Albums"), Role::Button);
             accessible_node(&tree, &gettext(locale, "Artists"), Role::Button);
-            let liked = accessible_node(&tree, &gettext(locale, "Liked Songs"), Role::Button);
+            let liked = accessible_node(&tree, &gettext(locale, "Library Songs"), Role::Button);
             accessible_frame(
                 &ctx,
                 &mut app,
@@ -2660,9 +2660,9 @@ mod tests {
                 &gettext(locale, "Search in Your Library"),
                 Role::TextInput,
             );
-            app.library.filter = gettext(locale, "Liked Songs").to_uppercase();
+            app.library.filter = gettext(locale, "Library Songs").to_uppercase();
             let tree = accessible_frame(&ctx, &mut app, vec![]);
-            accessible_node(&tree, &gettext(locale, "Liked Songs"), Role::Button);
+            accessible_node(&tree, &gettext(locale, "Library Songs"), Role::Button);
             assert!(
                 !tree
                     .nodes
@@ -3424,7 +3424,7 @@ mod tests {
         };
 
         let tree = accessible_frame(&ctx, &mut app, vec![]);
-        let liked = row(&tree, &gettext(Locale::German, "Liked Songs")).center();
+        let liked = row(&tree, &gettext(Locale::German, "Library Songs")).center();
         accessible_frame(
             &ctx,
             &mut app,
@@ -3440,7 +3440,7 @@ mod tests {
         );
 
         let tree = accessible_frame(&ctx, &mut app, vec![]);
-        let liked = row(&tree, &gettext(Locale::German, "Liked Songs")).center();
+        let liked = row(&tree, &gettext(Locale::German, "Library Songs")).center();
         accessible_frame(
             &ctx,
             &mut app,
@@ -3473,7 +3473,7 @@ mod tests {
         };
 
         let tree = accessible_frame(&ctx, &mut app, vec![]);
-        let (x0, x1, y0, y1) = button(&tree, "Liked Songs");
+        let (x0, x1, y0, y1) = button(&tree, "Library Songs");
         accessible_frame(
             &ctx,
             &mut app,
@@ -3548,7 +3548,7 @@ mod tests {
             .nodes
             .iter()
             .find_map(|(_, node)| {
-                let bounds = (node.role() == Role::Button && node.label() == Some("Liked Songs"))
+                let bounds = (node.role() == Role::Button && node.label() == Some("Library Songs"))
                     .then(|| node.bounds())
                     .flatten()?;
                 Some(egui::pos2(bounds.x0 as f32 + 24.0, bounds.y0 as f32 + 24.0))
@@ -3628,7 +3628,7 @@ mod tests {
             .nodes
             .iter()
             .find_map(|(_, node)| {
-                (node.role() == Role::Button && node.label() == Some("Liked Songs"))
+                (node.role() == Role::Button && node.label() == Some("Library Songs"))
                     .then(|| node.bounds())
                     .flatten()
             })
@@ -7775,7 +7775,7 @@ mod tests {
                 ("Your top mixes", made_for_you),
                 ("New releases", true),
                 ("Recommended for you", recommendations),
-                ("Liked Songs", true),
+                ("Library Songs", true),
                 ("Recently played", true),
                 ("Your top artists", true),
                 ("Your top songs", true),
@@ -7874,7 +7874,7 @@ mod tests {
         let text = view_frame(&ctx, &mut app, vec![], view);
         let pos = text
             .iter()
-            .find(|(text, _)| text == "Liked Songs")
+            .find(|(text, _)| text == "Library Songs")
             .unwrap()
             .1
             .center();
@@ -10400,7 +10400,7 @@ mod tests {
         let view = crate::ui::sidebar::show;
         view_frame(&ctx, &mut app, vec![], view);
         let painted = view_frame(&ctx, &mut app, vec![], view);
-        let name = sidebar_text(&painted, "Liked Songs").center();
+        let name = sidebar_text(&painted, "Library Songs").center();
         app.actions.clear();
         let [first, second] = double_click(name);
         view_frame(&ctx, &mut app, first, view);
@@ -11725,7 +11725,7 @@ mod tests {
             };
             accessible_frame(&ctx, &mut app, vec![]);
             let tree = accessible_frame(&ctx, &mut app, vec![]);
-            let source = row(&tree, "Liked Songs").center();
+            let source = row(&tree, "Library Songs").center();
             let target = row(&tree, "Late night focus");
             let target = egui::pos2(source.x, target.top() + 1.0);
             accessible_frame(
@@ -11776,9 +11776,9 @@ mod tests {
             app.settings = Settings::load(&path);
             let tree = accessible_frame(&ctx, &mut app, vec![]);
             assert_eq!(app.settings.sidebar_order, expected);
-            assert!(row(&tree, "Discover Weekly").top() < row(&tree, "Liked Songs").top());
-            assert!(row(&tree, "Liked Songs").top() < row(&tree, "Late night focus").top());
-            let source = row(&tree, "Liked Songs").center();
+            assert!(row(&tree, "Discover Weekly").top() < row(&tree, "Library Songs").top());
+            assert!(row(&tree, "Library Songs").top() < row(&tree, "Late night focus").top());
+            let source = row(&tree, "Library Songs").center();
             accessible_frame(
                 &ctx,
                 &mut app,
@@ -11802,7 +11802,7 @@ mod tests {
                     .any(|key| key == LIKED_SONGS_KEY)
             );
             let tree = accessible_frame(&ctx, &mut app, vec![]);
-            let source = row(&tree, "Liked Songs").center();
+            let source = row(&tree, "Library Songs").center();
             accessible_frame(
                 &ctx,
                 &mut app,
@@ -11821,7 +11821,7 @@ mod tests {
             );
             assert!(!app.settings.liked_songs_pinned);
             let tree = accessible_frame(&ctx, &mut app, vec![]);
-            let target = row(&tree, "Liked Songs").center();
+            let target = row(&tree, "Library Songs").center();
             app.saved.insert("spotify:track:trk0".into(), false);
             let source = egui::pos2(40.0, 755.0);
             accessible_frame(

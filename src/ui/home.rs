@@ -90,7 +90,7 @@ fn quick_access_tiles(app: &App) -> Vec<Tile> {
         .map(|user| format!("spotify:user:{}:collection", user.id));
     let liked_tile = || Tile {
         image: None,
-        name: gettext(app.locale, "Liked Songs").into_owned(),
+        name: gettext(app.locale, "Library Songs").into_owned(),
         page: Page::LikedSongs,
         uri: collection.clone(),
         liked: true,

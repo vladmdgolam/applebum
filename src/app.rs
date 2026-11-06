@@ -1477,7 +1477,12 @@ impl App {
             user_images: HashMap::new(),
             recent_contexts: session.recent_contexts.clone(),
             resume_context: session.last_context.clone(),
-            resume_track: session.last_track.clone(),
+            // The startup playlist waits in the player instead of a remembered song,
+            // which would replace it if Play were pressed while it loads.
+            resume_track: session
+                .last_track
+                .clone()
+                .filter(|_| !cfg!(all(feature = "apple-music", not(test)))),
             resume_position_ms: session.last_position_ms,
             resume_load: None,
             resume_queue: session.last_added_queue.clone(),
@@ -1755,7 +1760,9 @@ impl App {
     }
 
     pub fn show_soloist_onboarding(&self) -> bool {
-        self.soloist_onboarding != crate::settings::SoloistOnboarding::Complete
+        // Spotify's player has no place in an Apple Music client.
+        !cfg!(all(feature = "apple-music", not(test)))
+            && self.soloist_onboarding != crate::settings::SoloistOnboarding::Complete
             && crate::soloist::install::supported()
             && self.is_connected()
             && self.user.as_ref().is_some_and(|user| {
@@ -2977,6 +2984,11 @@ impl App {
                 Event::Local(state) => self.handle_local(*state),
                 Event::RemoteChanged => {
                     self.remote_pushed_at.get_or_insert_with(Instant::now);
+                    // Songs just appeared in the player: fetch them on the next frame.
+                    #[cfg(feature = "apple-music")]
+                    {
+                        self.queue_fetched_at = None;
+                    }
                 }
                 Event::RemoteVolume { device_id, volume } => {
                     self.handle_remote_volume(&device_id, volume);
@@ -4020,7 +4032,7 @@ impl App {
         let context = self.playing_context_uri()?;
         if context.ends_with(":collection") {
             return Some(PlayingFrom {
-                name: gettext(self.locale, "Liked Songs").into_owned(),
+                name: gettext(self.locale, "Library Songs").into_owned(),
                 page: Some(Page::LikedSongs),
             });
         }
@@ -4614,7 +4626,9 @@ impl App {
             {
                 self.refresh_devices();
             }
-            let playlist_open = self.settings.winamp_window && self.settings.playlist_open;
+            // A Windows Media Player skin has its own drawer, which this setting
+            // doesn't track, so the skin window always keeps the queue fresh.
+            let playlist_open = self.settings.winamp_window;
             if (self.show_queue_panel || matches!(self.page(), Page::Queue) || playlist_open)
                 && !self.queue.is_loading()
                 && self
@@ -25881,7 +25895,7 @@ mod tests {
                 ),
                 (
                     "spotify:user:me:collection",
-                    gettext(locale, "Liked Songs").into_owned(),
+                    gettext(locale, "Library Songs").into_owned(),
                     Some(Page::LikedSongs),
                 ),
                 (
@@ -25960,7 +25974,7 @@ mod tests {
         );
 
         assume(&mut app, "spotify:user:me:collection");
-        assert_eq!(named(&app), ("Liked Songs".into(), Some(Page::LikedSongs)));
+        assert_eq!(named(&app), ("Library Songs".into(), Some(Page::LikedSongs)));
 
         app.track_cache.insert(
             "xyz".into(),

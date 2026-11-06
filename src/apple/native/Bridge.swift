@@ -59,7 +59,10 @@ private func harvestSongs(from data: Data) {
 }
 
 /// The songs for these IDs, in order, asking Apple only for those not seen yet.
-@MainActor private func resolveSongs(_ ids: [String]) async throws -> [Song] {
+///
+/// A library song can name a catalog ID that the catalog doesn't return, as an
+/// upload can. `libraryIDs` maps those catalog IDs to the song's own library ID.
+@MainActor private func resolveSongs(_ ids: [String], libraryIDs: [String: String] = [:]) async throws -> [Song] {
   let missing = ids.filter { knownSongs[$0] == nil }
   let library = missing.filter { $0.hasPrefix("i.") }
   let catalog = missing.filter { !$0.hasPrefix("i.") }
@@ -73,6 +76,16 @@ private func harvestSongs(from data: Data) {
     request.filter(matching: \.id, memberOf: library.map { MusicItemID($0) })
     request.limit = library.count
     for song in try await request.response().items { knownSongs[song.id.rawValue] = song }
+  }
+  let fallbacks = ids.filter { knownSongs[$0] == nil }.compactMap { id in libraryIDs[id].map { (id, $0) } }
+  if !fallbacks.isEmpty {
+    var request = MusicLibraryRequest<Song>()
+    request.filter(matching: \.id, memberOf: fallbacks.map { MusicItemID($0.1) })
+    request.limit = fallbacks.count
+    let found = try await request.response().items
+    for (id, libraryID) in fallbacks {
+      if let song = found.first(where: { $0.id.rawValue == libraryID }) { knownSongs[id] = song }
+    }
   }
   return ids.compactMap { knownSongs[$0] }
 }
@@ -115,7 +128,98 @@ public func amRequest(_ path: UnsafePointer<CChar>, _ context: UnsafeMutableRawP
   }
 }
 
+/// Any method against api.music.apple.com, for changing the user's library.
+@_cdecl("am_send")
+public func amSend(
+  _ method: UnsafePointer<CChar>, _ path: UnsafePointer<CChar>, _ body: UnsafePointer<CChar>,
+  _ context: UnsafeMutableRawPointer?, _ reply: @escaping AMReply
+) {
+  let pending = Pending(context: context, reply: reply)
+  let method = String(cString: method)
+  let path = String(cString: path)
+  let body = String(cString: body)
+  Task {
+    guard let url = URL(string: "https://api.music.apple.com" + path) else {
+      pending.send(-1, "bad path: \(path)")
+      return
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = method
+    if !body.isEmpty {
+      request.httpBody = Data(body.utf8)
+      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    }
+    do {
+      let response = try await MusicDataRequest(urlRequest: request).response()
+      pending.send(Int32(response.urlResponse.statusCode), response.data)
+    } catch let failure as MusicDataRequest.Error {
+      pending.send(Int32(failure.status), failure.detailText)
+    } catch {
+      pending.send(-1, String(describing: error))
+    }
+  }
+}
+
 // MARK: - Playback
+
+@MainActor private func describe(_ song: Song) -> [String: Any] {
+  [
+    "id": song.id.rawValue,
+    "title": song.title,
+    "artist": song.artistName,
+    "album": song.albumTitle ?? "",
+    "durationMs": Int((song.duration ?? 0) * 1000),
+    "art": song.artwork?.url(width: 640, height: 640)?.absoluteString ?? "",
+  ]
+}
+
+/// Adds a song to the end of what's queued.
+@_cdecl("am_enqueue")
+public func amEnqueue(_ id: UnsafePointer<CChar>, _ context: UnsafeMutableRawPointer?, _ reply: @escaping AMReply) {
+  let pending = Pending(context: context, reply: reply)
+  let id = String(cString: id)
+  Task { @MainActor in
+    do {
+      guard let song = try await resolveSongs([id]).first else {
+        pending.send(-1, "Apple Music didn't return this song")
+        return
+      }
+      try await ApplicationMusicPlayer.shared.queue.insert(song, position: .tail)
+      pending.send(200)
+    } catch {
+      pending.send(-1, String(describing: error))
+    }
+  }
+}
+
+/// The songs after the current one, as {"current":{...},"next":[{...}]}.
+@_cdecl("am_queue")
+public func amQueue(_ context: UnsafeMutableRawPointer?, _ reply: @escaping AMReply) {
+  let pending = Pending(context: context, reply: reply)
+  Task { @MainActor in
+    let queue = ApplicationMusicPlayer.shared.queue
+    var result: [String: Any] = [:]
+    var next: [[String: Any]] = []
+    var passed = queue.currentEntry == nil
+    for entry in queue.entries {
+      // Not every entry resolves to a song, but each has a title of its own.
+      var row: [String: Any]
+      if case let .song(song)? = entry.item {
+        row = describe(song)
+      } else {
+        row = ["id": "entry-\(entry.id)", "title": entry.title, "artist": entry.subtitle ?? "", "album": "", "durationMs": 0, "art": ""]
+      }
+      if passed {
+        next.append(row)
+      } else if entry.id == queue.currentEntry?.id {
+        result["current"] = row
+        passed = true
+      }
+    }
+    result["next"] = next
+    pending.sendJSON(result)
+  }
+}
 
 /// {"ids":[...], "start":0, "positionMs":0, "play":true}. Replies with timings.
 @_cdecl("am_load")
@@ -130,19 +234,32 @@ public func amLoad(_ json: UnsafePointer<CChar>, _ context: UnsafeMutableRawPoin
         pending.send(-1, "nothing to play")
         return
       }
+      // A warm-up never replaces anything: a song may already be loaded.
+      let warm = (spec["warm"] as? Bool) ?? false
+      if warm, ApplicationMusicPlayer.shared.queue.currentEntry != nil {
+        pending.sendJSON(["skipped": true])
+        return
+      }
       let began = Date()
       let start = min(max(spec["start"] as? Int ?? 0, 0), ids.count - 1)
       // One request can name 300 songs; a longer list starts around its chosen song.
       let first = max(0, min(start, ids.count - 300))
       let window = Array(ids[first..<min(first + 300, ids.count)])
-      let songs = try await resolveSongs(window)
+      let libraryIDs = spec["libraryIDs"] as? [String: String] ?? [:]
+      let songs = try await resolveSongs(window, libraryIDs: libraryIDs)
+      // Songs are found under the ID asked for, which a fallback's own ID differs from.
+      let present = window.filter { knownSongs[$0] != nil }
       guard !songs.isEmpty else {
         pending.send(-1, "Apple Music didn't return these songs")
         return
       }
-      let startIndex = songs.firstIndex { $0.id.rawValue == ids[start] } ?? 0
+      let startIndex = present.firstIndex(of: ids[start]) ?? 0
       let resolved = Date()
       let player = ApplicationMusicPlayer.shared
+      if warm, player.queue.currentEntry != nil {
+        pending.sendJSON(["skipped": true])
+        return
+      }
       let playing = (spec["play"] as? Bool) ?? true
       func begin() async throws {
         if playing { try await player.play() } else { try await player.prepareToPlay() }
@@ -165,7 +282,11 @@ public func amLoad(_ json: UnsafePointer<CChar>, _ context: UnsafeMutableRawPoin
       if let position = spec["positionMs"] as? Int, position > 0 {
         player.playbackTime = TimeInterval(position) / 1000
       }
+      let dropped = window.filter { knownSongs[$0] == nil }
       pending.sendJSON([
+        "requested": ids.count,
+        "queued": songs.count,
+        "dropped": Array(dropped.prefix(12)),
         "resolveMs": Int(resolved.timeIntervalSince(began) * 1000),
         "playMs": Int(Date().timeIntervalSince(resolved) * 1000),
       ])
@@ -199,6 +320,41 @@ public func amControl(_ operation: Int32, _ value: Double) {
   }
 }
 
+/// Jumps `count` songs ahead at once, for a click on a row further down the queue.
+@_cdecl("am_skip")
+public func amSkip(_ count: Int32) {
+  Task { @MainActor in
+    let player = ApplicationMusicPlayer.shared
+    do {
+      if count > 1 {
+        let entries = Array(player.queue.entries)
+        if let current = player.queue.currentEntry,
+          let index = entries.firstIndex(where: { $0.id == current.id }),
+          index + Int(count) < entries.count
+        {
+          player.queue.currentEntry = entries[index + Int(count)]
+          try await player.play()
+          return
+        }
+      }
+      try await player.skipToNextEntry()
+      if player.state.playbackStatus != .playing { try await player.play() }
+    } catch {
+      NSLog("am_skip %d failed: %@", count, String(describing: error))
+    }
+  }
+}
+
+/// Stops the player and waits for it, for quitting: its process outlives ours.
+@_cdecl("am_stop")
+public func amStop(_ context: UnsafeMutableRawPointer?, _ reply: @escaping AMReply) {
+  let pending = Pending(context: context, reply: reply)
+  Task { @MainActor in
+    ApplicationMusicPlayer.shared.stop()
+    pending.send(200)
+  }
+}
+
 @_cdecl("am_state")
 public func amState(_ context: UnsafeMutableRawPointer?, _ reply: @escaping AMReply) {
   let pending = Pending(context: context, reply: reply)
@@ -213,6 +369,13 @@ public func amState(_ context: UnsafeMutableRawPointer?, _ reply: @escaping AMRe
     if let entry = player.queue.currentEntry {
       state["entryTitle"] = entry.title
       state["entrySubtitle"] = entry.subtitle ?? ""
+      // An upload's entry may not resolve to a song; it still has a title.
+      state["id"] = "entry-\(entry.id)"
+      state["title"] = entry.title
+      state["artist"] = entry.subtitle ?? ""
+      state["album"] = ""
+      state["durationMs"] = 0
+      state["art"] = ""
       if case let .song(song)? = entry.item {
         state["id"] = song.id.rawValue
         state["title"] = song.title

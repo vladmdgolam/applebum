@@ -419,8 +419,8 @@ mod tests {
     /// Installed copies, and every copy on Linux and macOS, keep the folders
     /// they always had.
     #[test]
-    fn the_per_user_folders_are_the_ones_spotifast_always_used() {
-        let Some(project) = directories::ProjectDirs::from("me", "paolino", "spotifast") else {
+    fn the_per_user_folders_are_applebums_own() {
+        let Some(project) = directories::ProjectDirs::from("xyz", "vladik", "applebum") else {
             return;
         };
         let dirs = AppDirs::installed();

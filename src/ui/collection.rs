@@ -2545,7 +2545,7 @@ pub fn liked(app: &mut App, ui: &mut egui::Ui) {
     } else {
         song_count(locale, total)
     };
-    let liked_title = gettext(locale, "Liked Songs");
+    let liked_title = gettext(locale, "Library Songs");
     hero(
         app,
         ui,

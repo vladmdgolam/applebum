@@ -24,6 +24,9 @@ use crate::player::{LoadSpec, LocalState, LocalTrack, Playback, PlayerCommand, R
 
 pub const DEVICE_ID: &str = "apple-music";
 
+/// The playlist waiting in the player at launch, paused.
+const STARTUP_PLAYLIST: &str = "2026";
+
 type Reply = extern "C" fn(*mut c_void, i32, *const u8, usize);
 type Audio = extern "C" fn(*mut c_void, *const f32, usize, u32);
 
@@ -32,8 +35,19 @@ unsafe extern "C" {
     fn am_request(path: *const c_char, context: *mut c_void, reply: Reply);
     fn am_load(json: *const c_char, context: *mut c_void, reply: Reply);
     fn am_control(operation: i32, value: f64);
+    fn am_stop(context: *mut c_void, reply: Reply);
+    fn am_skip(count: i32);
     fn am_state(context: *mut c_void, reply: Reply);
     fn am_tap_start(context: *mut c_void, callback: Audio);
+    fn am_send(
+        method: *const c_char,
+        path: *const c_char,
+        body: *const c_char,
+        context: *mut c_void,
+        reply: Reply,
+    );
+    fn am_enqueue(id: *const c_char, context: *mut c_void, reply: Reply);
+    fn am_queue(context: *mut c_void, reply: Reply);
 }
 
 extern "C" fn on_reply(context: *mut c_void, status: i32, data: *const u8, length: usize) {
@@ -74,6 +88,147 @@ async fn get(path: &str) -> ApiResult<Value> {
                 String::from_utf8_lossy(&body)
             ),
         })
+    }
+}
+
+/// A change to the user's account: POST, PUT or DELETE.
+async fn send(method: &str, path: &str, body: &str) -> ApiResult<()> {
+    let (method, path, body) = (c_string(method), c_string(path), c_string(body));
+    let (status, reply) = call(|context, reply| unsafe {
+        am_send(method.as_ptr(), path.as_ptr(), body.as_ptr(), context, reply)
+    })
+    .await;
+    if (200..300).contains(&status) {
+        Ok(())
+    } else {
+        Err(ApiError::Status {
+            status: status.max(0) as u16,
+            message: format!(
+                "Apple Music returned {status}: {}",
+                String::from_utf8_lossy(&reply)
+            ),
+        })
+    }
+}
+
+/// A rateable song or album as (Apple's resource type, catalog ID).
+fn rateable(uri: &str) -> Option<(&'static str, &str)> {
+    let (kind, id) = if let Some(id) = uri.strip_prefix("spotify:track:") {
+        ("songs", id)
+    } else {
+        ("albums", uri.strip_prefix("spotify:album:")?)
+    };
+    // Only catalog items have ratings here; library IDs start with a letter.
+    id.chars().all(|c| c.is_ascii_digit()).then_some((kind, id))
+}
+
+/// The heart is a love rating, which can be taken back, and a loved song joins
+/// the library. Apple has no call to remove it from the library again.
+async fn set_loved(uris: &[String], loved: bool) -> ApiResult<()> {
+    for uri in uris {
+        let Some((kind, id)) = rateable(uri) else {
+            return Err(ApiError::Status {
+                status: 400,
+                message: "This item can't be favorited yet".to_owned(),
+            });
+        };
+        let path = format!("/v1/me/ratings/{kind}/{id}");
+        if loved {
+            let rating = json!({"type": "rating", "attributes": {"value": 1}}).to_string();
+            send("PUT", &path, &rating).await?;
+            send("POST", &format!("/v1/me/library?ids[{kind}]={id}"), "").await?;
+        } else {
+            send("DELETE", &path, "").await?;
+        }
+    }
+    Ok(())
+}
+
+async fn are_loved(uris: &[String]) -> ApiResult<Vec<bool>> {
+    let mut loved = std::collections::HashSet::new();
+    for kind in ["songs", "albums"] {
+        let ids: Vec<&str> = uris
+            .iter()
+            .filter_map(|uri| rateable(uri))
+            .filter(|(found, _)| *found == kind)
+            .map(|(_, id)| id)
+            .collect();
+        for chunk in ids.chunks(100) {
+            let found = or_empty(get(&format!("/v1/me/ratings/{kind}?ids={}", chunk.join(","))).await)?;
+            for rating in found["data"].as_array().into_iter().flatten() {
+                if rating["attributes"]["value"].as_i64() == Some(1) {
+                    loved.insert(text(rating, "id"));
+                }
+            }
+        }
+    }
+    Ok(uris
+        .iter()
+        .map(|uri| rateable(uri).is_some_and(|(_, id)| loved.contains(id)))
+        .collect())
+}
+
+fn track_from_player(song: &Value) -> Track {
+    let id = text(song, "id");
+    let art = text(song, "art");
+    let artist = text(song, "artist");
+    Track {
+        uri: format!("spotify:track:{id}"),
+        id: Some(id),
+        name: text(song, "title"),
+        duration_ms: song["durationMs"].as_u64().unwrap_or_default() as u32,
+        artists: vec![ArtistRef {
+            name: artist,
+            ..Default::default()
+        }],
+        album: Some(Album {
+            name: text(song, "album"),
+            images: if art.is_empty() {
+                Vec::new()
+            } else {
+                vec![Image {
+                    url: art,
+                    width: Some(640),
+                    height: Some(640),
+                }]
+            },
+            ..Default::default()
+        }),
+        is_playable: Some(true),
+        ..Default::default()
+    }
+}
+
+async fn player_queue() -> ApiResult<Queue> {
+    let (status, body) = call(|context, reply| unsafe { am_queue(context, reply) }).await;
+    if status != 200 {
+        return Err(ApiError::Decode(String::from_utf8_lossy(&body).into_owned()));
+    }
+    let state: Value =
+        serde_json::from_slice(&body).map_err(|error| ApiError::Decode(error.to_string()))?;
+    Ok(Queue {
+        currently_playing: state
+            .get("current")
+            .map(|song| PlayableItem::Track(track_from_player(song))),
+        queue: state["next"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|song| PlayableItem::Track(track_from_player(song)))
+            .collect(),
+    })
+}
+
+async fn enqueue(uri: &str) -> ApiResult<()> {
+    let Some(id) = song_id(uri) else {
+        return Err(ApiError::Decode("Only songs can be queued".into()));
+    };
+    let id = c_string(id);
+    let (status, body) = call(|context, reply| unsafe { am_enqueue(id.as_ptr(), context, reply) }).await;
+    if status == 200 {
+        Ok(())
+    } else {
+        Err(ApiError::Decode(String::from_utf8_lossy(&body).into_owned()))
     }
 }
 
@@ -347,15 +502,21 @@ async fn artist_top_songs(id: &str) -> ApiResult<Vec<Track>> {
     Ok(songs_in(&found["data"]))
 }
 
+/// Who the interface signs in as. MusicKit doesn't name the listener, and
+/// "premium" says playback is allowed, which authorization just established.
+fn account() -> User {
+    User {
+        id: DEVICE_ID.to_owned(),
+        display_name: Some("Apple Music".to_owned()),
+        product: Some("premium".to_owned()),
+        ..Default::default()
+    }
+}
+
 /// The answer to a request Apple Music can serve, or `None` to let it fall through.
 pub async fn dispatch(request: &ApiRequest) -> Option<ApiResponse> {
     Some(match request {
-        ApiRequest::Me => ApiResponse::Me(Ok(User {
-            id: DEVICE_ID.to_owned(),
-            display_name: Some("Apple Music".to_owned()),
-            product: Some("premium".to_owned()),
-            ..Default::default()
-        })),
+        ApiRequest::Me => ApiResponse::Me(Ok(account())),
         ApiRequest::Devices => ApiResponse::Devices(Ok(Vec::new())),
         // Nothing plays elsewhere: the player here is the only one.
         ApiRequest::PlaybackState { seq } => ApiResponse::PlaybackState {
@@ -364,7 +525,9 @@ pub async fn dispatch(request: &ApiRequest) -> Option<ApiResponse> {
         },
         ApiRequest::Queue { seq } => ApiResponse::Queue {
             seq: *seq,
-            result: Ok(Queue::default()),
+            result: player_queue().await.inspect(|queue| {
+                log::info!("apple: queue has {} songs after the current one", queue.queue.len());
+            }),
         },
         ApiRequest::Search { query, serial } | ApiRequest::SearchCatalogue { query, serial } => {
             ApiResponse::Search {
@@ -493,6 +656,35 @@ pub async fn dispatch(request: &ApiRequest) -> Option<ApiResponse> {
                 ..Default::default()
             }),
         },
+        ApiRequest::SetSaved { uris, saved } => ApiResponse::SavedChanged {
+            uris: uris.clone(),
+            saved: *saved,
+            result: set_loved(uris, *saved).await,
+        },
+        ApiRequest::Contains { uris } => ApiResponse::Contains {
+            uris: uris.clone(),
+            result: are_loved(uris).await,
+        },
+        ApiRequest::AddToQueue { uri, label, .. } => ApiResponse::QueueAdded {
+            label: label.clone(),
+            result: enqueue(uri).await,
+        },
+        ApiRequest::AddManyToQueue { request, uris, .. } => {
+            let mut added = 0;
+            let mut result = Ok(());
+            for uri in uris {
+                result = enqueue(uri).await;
+                if result.is_err() {
+                    break;
+                }
+                added += 1;
+            }
+            ApiResponse::QueueBatchAdded {
+                request: *request,
+                added,
+                result,
+            }
+        }
         ApiRequest::Album { id } => ApiResponse::Album {
             id: id.clone(),
             result: album_by_id(id).await,
@@ -576,8 +768,9 @@ fn start_index(spec: &LoadSpec, ids: &[String]) -> usize {
     spec.offset_index.unwrap_or(0) as usize
 }
 
-async fn load(spec: LoadSpec) -> anyhow::Result<()> {
+async fn load(spec: LoadSpec, warm: bool) -> anyhow::Result<()> {
     let began = Instant::now();
+    let mut library_ids = serde_json::Map::new();
     let mut ids: Vec<String> = spec
         .uris
         .iter()
@@ -611,12 +804,26 @@ async fn load(spec: LoadSpec) -> anyhow::Result<()> {
         // Every song, so the queue is the whole playlist from the chosen one on.
         let mut offset = 0;
         loop {
-            let page = playlist_tracks(playlist, offset)
-                .await
-                .map_err(|error| anyhow::anyhow!("{error}"))?;
-            let more = page.next.is_some();
-            offset += page.items.len() as u32;
-            ids.extend(page.items.into_iter().filter_map(|track| track.id));
+            let found = or_empty(
+                get(&format!(
+                    "/v1/me/library/playlists/{playlist}/tracks?limit=100&offset={offset}"
+                ))
+                .await,
+            )
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+            let songs = found["data"].as_array().cloned().unwrap_or_default();
+            let more = found["next"].is_string();
+            offset += songs.len() as u32;
+            for song in &songs {
+                let library = text(song, "id");
+                match song["attributes"]["playParams"]["catalogId"].as_str() {
+                    Some(catalog) => {
+                        library_ids.insert(catalog.to_owned(), json!(library));
+                        ids.push(catalog.to_owned());
+                    }
+                    None => ids.push(library),
+                }
+            }
             if !more || offset >= 1000 {
                 break;
             }
@@ -633,6 +840,8 @@ async fn load(spec: LoadSpec) -> anyhow::Result<()> {
             "start": start_index(&spec, &ids),
             "positionMs": spec.position_ms,
             "play": spec.play,
+            "warm": warm,
+            "libraryIDs": library_ids,
             "ids": ids,
         })
         .to_string(),
@@ -649,6 +858,60 @@ async fn load(spec: LoadSpec) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The library playlist with this name, as a URI.
+async fn playlist_named(name: &str) -> Option<String> {
+    let mut offset = 0;
+    loop {
+        let found = get(&format!("/v1/me/library/playlists?limit=100&offset={offset}"))
+            .await
+            .ok()?;
+        let page = listed(&found, offset, playlist);
+        if let Some(playlist) = page.items.iter().find(|playlist| playlist.name == name) {
+            return Some(playlist.uri.clone());
+        }
+        page.next.as_ref()?;
+        offset += page.items.len() as u32;
+    }
+}
+
+async fn warm_up(client: Client) {
+    use std::sync::atomic::Ordering;
+    let began = Instant::now();
+    let spec = if let Some(playlist) = playlist_named(STARTUP_PLAYLIST).await {
+        LoadSpec {
+            context_uri: Some(playlist),
+            play: false,
+            ..Default::default()
+        }
+    } else {
+        log::info!("apple: no playlist named {STARTUP_PLAYLIST}, using the last song played");
+        let Ok(recent) = get("/v1/me/recent/played/tracks?limit=1").await else {
+            return;
+        };
+        let Some(track) = recent["data"].get(0).map(track) else {
+            return;
+        };
+        LoadSpec {
+            uris: vec![track.uri],
+            play: false,
+            ..Default::default()
+        }
+    };
+    let chosen = &client.chosen;
+    // Whatever was chosen while this waited on the network comes first.
+    if chosen.load(Ordering::SeqCst) {
+        return;
+    }
+    match load(spec, true).await {
+        Ok(()) => {
+            log::info!("apple: warmed up in {} ms", began.elapsed().as_millis());
+            // Let the panel fetch the rows that just appeared.
+            emit(&client.events, &client.waker, Event::RemoteChanged);
+        }
+        Err(error) => log::warn!("apple: warm-up failed: {error}"),
+    }
+}
+
 /// The running side of Apple Music: the player's commands and its reported state.
 #[derive(Clone)]
 pub struct Client {
@@ -658,6 +921,10 @@ pub struct Client {
     /// until its first sound is reported. The old song's clock keeps running
     /// until then, so it can't count as the new song's sound.
     asked_at: Arc<std::sync::Mutex<Option<(Instant, bool)>>>,
+    /// Something was chosen to play, so the warm-up must leave the player alone.
+    chosen: Arc<std::sync::atomic::AtomicBool>,
+    /// Skips asked for together, as a click on a row far down the queue does.
+    skips: Arc<std::sync::atomic::AtomicI32>,
 }
 
 fn emit(events: &std::sync::mpsc::Sender<Event>, waker: &Waker, event: Event) {
@@ -676,6 +943,8 @@ impl Client {
             events,
             waker,
             asked_at: Arc::default(),
+            chosen: Arc::default(),
+            skips: Arc::default(),
         };
         let starting = client.clone();
         tokio::spawn(async move {
@@ -699,6 +968,12 @@ impl Client {
                     username: "Apple Music".to_owned(),
                 }),
             );
+            // The main window waits for an account, which a Spotify sign-in sends itself.
+            emit(
+                &starting.events,
+                &starting.waker,
+                Event::Api(Box::new(ApiResponse::Me(Ok(account())))),
+            );
             emit(
                 &starting.events,
                 &starting.waker,
@@ -707,9 +982,18 @@ impl Client {
                 }),
             );
             start_tap(tap);
+            // The last song, paused: somewhere to resume, and the player's
+            // process is already up when the first song is chosen.
+            tokio::spawn(warm_up(starting.clone()));
             starting.report_state().await;
         });
         client
+    }
+
+    /// Quitting stops the song: the player's process would keep it playing.
+    pub async fn stop(&self) {
+        let stopped = call(|context, reply| unsafe { am_stop(context, reply) });
+        let _ = tokio::time::timeout(Duration::from_millis(500), stopped).await;
     }
 
     pub fn player(&self, command: PlayerCommand) {
@@ -717,7 +1001,18 @@ impl Client {
         let control = |operation: i32, value: f64| unsafe { am_control(operation, value) };
         match command {
             PlayerCommand::Toggle => control(1, 0.0),
-            PlayerCommand::Next => control(2, 0.0),
+            PlayerCommand::Next => {
+                use std::sync::atomic::Ordering;
+                if self.skips.fetch_add(1, Ordering::SeqCst) == 0 {
+                    let skips = Arc::clone(&self.skips);
+                    tokio::spawn(async move {
+                        tokio::time::sleep(Duration::from_millis(30)).await;
+                        let count = skips.swap(0, Ordering::SeqCst);
+                        // SAFETY: am_skip only reads its plain argument.
+                        unsafe { am_skip(count) };
+                    });
+                }
+            }
             PlayerCommand::Previous => control(3, 0.0),
             PlayerCommand::Seek(position) => control(4, f64::from(position)),
             PlayerCommand::Shuffle(on) => control(5, if on { 1.0 } else { 0.0 }),
@@ -732,9 +1027,10 @@ impl Client {
             PlayerCommand::Load(spec) => {
                 *self.asked_at.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) =
                     Some((Instant::now(), false));
+                self.chosen.store(true, std::sync::atomic::Ordering::SeqCst);
                 let client = self.clone();
                 tokio::spawn(async move {
-                    let result = load(spec).await;
+                    let result = load(spec, false).await;
                     {
                         let mut asked = client
                             .asked_at
@@ -758,9 +1054,20 @@ impl Client {
             // MusicKit has no per-app volume, and these have no meaning here yet.
             PlayerCommand::Volume(_)
             | PlayerCommand::VolumePreview(_)
-            | PlayerCommand::AddToQueue(_)
             | PlayerCommand::ClearQueue
             | PlayerCommand::Transfer => {}
+            PlayerCommand::AddToQueue(uri) => {
+                let client = self.clone();
+                tokio::spawn(async move {
+                    if let Err(error) = enqueue(&uri).await {
+                        emit(
+                            &client.events,
+                            &client.waker,
+                            Event::Error(format!("Couldn't queue that: {error}")),
+                        );
+                    }
+                });
+            }
         }
     }
 
@@ -784,6 +1091,8 @@ impl Client {
                 "playing" => Playback::Playing,
                 "paused" | "interrupted" => Playback::Paused,
                 "seekingForward" | "seekingBackward" => Playback::Loading,
+                // A song waiting in the player is paused, ready to start.
+                _ if state["id"].is_string() => Playback::Paused,
                 _ => Playback::Stopped,
             };
             let position_ms = state["positionMs"].as_u64().unwrap_or_default() as u32;

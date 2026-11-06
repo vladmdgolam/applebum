@@ -630,7 +630,7 @@ mod mac_impl {
         ));
         view_menu.addItem(&create_item(
             mtm,
-            ns_string!("Liked Songs"),
+            ns_string!("Library Songs"),
             Some(sel!(openLikedSongs:)),
             ns_string!("l"),
             Some(NSEventModifierFlags::Command),

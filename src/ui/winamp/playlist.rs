@@ -650,7 +650,7 @@ fn add_menu(app: &mut App, ui: &mut egui::Ui) {
         app.actions.push(Action::FocusSearch);
         app.actions.push(Action::ToggleWinampWindow);
     }
-    if ui.button(gettext(locale, "Liked Songs").as_ref()).clicked() {
+    if ui.button(gettext(locale, "Library Songs").as_ref()).clicked() {
         app.actions.push(Action::Open(Page::LikedSongs));
         app.actions.push(Action::ToggleWinampWindow);
     }

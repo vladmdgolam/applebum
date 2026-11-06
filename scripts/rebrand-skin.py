@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Recolors the built-in Winamp skin from green to apple red and redraws its
-title as APPLEBUM, in the skin's own 5-pixel lettering. Also draws the icon.
+"""Redraws the built-in Winamp skin's title as APPLEBUM, in the skin's own
+5-pixel lettering, keeping its green. Also draws the icon.
 
     python3 scripts/rebrand-skin.py   (needs Pillow; run once, output is committed)
 """
-import colorsys, io, re, zipfile
+import io, zipfile
 from PIL import Image, ImageDraw
 
 SKIN = "assets/skins/spotifast.wsz"
 ICON = "packaging/macos/icon-1024.png"
-RED_HUE = 352 / 360
 
 GLYPHS = {
     "A": [".##.", "#..#", "####", "#..#", "#..#"],
@@ -20,14 +19,6 @@ GLYPHS = {
     "U": ["#..#", "#..#", "#..#", "#..#", ".##."],
     "M": ["#...#", "##.##", "#.#.#", "#...#", "#...#"],
 }
-
-
-def recolor(r, g, b):
-    h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
-    if 80 / 360 <= h <= 175 / 360 and s > 0.15:
-        r, g, b = colorsys.hsv_to_rgb(RED_HUE, min(1, s * 1.02), v)
-        return round(r * 255), round(g * 255), round(b * 255)
-    return r, g, b
 
 
 def redraw_title(image):
@@ -52,21 +43,11 @@ def redraw_title(image):
 def rebuild_skin():
     with zipfile.ZipFile(SKIN) as archive:
         files = {info.filename: archive.read(info.filename) for info in archive.infolist()}
-    for name, data in files.items():
-        if name.endswith(".bmp"):
-            image = Image.open(io.BytesIO(data)).convert("RGB")
-            image.putdata([recolor(*pixel) for pixel in image.getdata()])
-            if name == "titlebar.bmp":
-                redraw_title(image)
-            out = io.BytesIO()
-            image.save(out, "BMP")
-            files[name] = out.getvalue()
-        elif name == "viscolor.txt":
-            def line(match):
-                return "%d,%d,%d" % recolor(*map(int, match.groups()))
-            files[name] = re.sub(r"(\d+),(\d+),(\d+)", line, data.decode()).encode()
-        elif name == "pledit.txt":
-            files[name] = data.decode().replace("#1ED760", "#FA2D48").encode()
+    image = Image.open(io.BytesIO(files["titlebar.bmp"])).convert("RGB")
+    redraw_title(image)
+    out = io.BytesIO()
+    image.save(out, "BMP")
+    files["titlebar.bmp"] = out.getvalue()
     with zipfile.ZipFile(SKIN, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, data in files.items():
             archive.writestr(zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0)), data)

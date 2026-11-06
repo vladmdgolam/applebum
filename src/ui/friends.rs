@@ -301,7 +301,7 @@ fn row(
             // A friend's Liked Songs has no page here: ours is not theirs.
             let liked = uri.is_some_and(|uri| uri.ends_with(":collection"));
             let name = if liked {
-                Some(gettext(app.locale, "Liked Songs").to_string())
+                Some(gettext(app.locale, "Library Songs").to_string())
             } else {
                 friend.context_name.clone()
             };

@@ -373,7 +373,7 @@ pub fn shortcuts(locale: Locale) -> Vec<(Cow<'static, str>, Cow<'static, str>)> 
         ),
         (
             keys(platform_shortcut("Ctrl+L", "Cmd+L")),
-            gettext(locale, "Liked Songs"),
+            gettext(locale, "Library Songs"),
         ),
         (
             keys(platform_shortcut("Ctrl+Shift+A", "Cmd+Shift+A")),

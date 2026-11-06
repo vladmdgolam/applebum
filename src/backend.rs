@@ -2395,7 +2395,13 @@ impl Worker {
                         waker.wake();
                     });
                 }
-                Command::Shutdown => break,
+                Command::Shutdown => {
+                    #[cfg(feature = "apple-music")]
+                    if let Some(apple) = &self.apple {
+                        apple.stop().await;
+                    }
+                    break;
+                }
                 Command::SignIn {
                     request,
                     config,
