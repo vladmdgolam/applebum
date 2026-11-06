@@ -529,6 +529,8 @@ pub struct App {
     /// What a new window takes up from `page_scroll` on its first frame.
     pub restore_scroll: Option<(String, f32)>,
     pub devices: Vec<Device>,
+    /// What the Output menu shows: each output's id, name, and whether it's on.
+    output_menu: Vec<(String, String, bool)>,
     /// Receivers seen on the local network. Spotify lists a receiver only
     /// once it has an account, so these are the ones it cannot see yet.
     pub receivers: Vec<crate::zeroconf::Receiver>,
@@ -1295,6 +1297,7 @@ impl App {
             page_scroll: None,
             restore_scroll: None,
             devices: Vec::new(),
+            output_menu: Vec::new(),
             receivers: Vec::new(),
             device_history: session.device_history.clone(),
             activating_receiver: None,
@@ -4626,6 +4629,8 @@ impl App {
             {
                 self.refresh_devices();
             }
+            #[cfg(feature = "apple-music")]
+            self.sync_output_menu();
             // A Windows Media Player skin has its own drawer, which this setting
             // doesn't track, so the skin window always keeps the queue fresh.
             let playlist_open = self.settings.winamp_window;
@@ -7261,6 +7266,37 @@ impl App {
         });
     }
 
+    /// The output in this row of the Output menu.
+    pub fn output_id(&self, row: u8) -> Option<String> {
+        self.output_menu.get(row as usize).map(|(id, _, _)| id.clone())
+    }
+
+    /// Keeps the speakers known and the Output menu in step with them.
+    #[cfg(feature = "apple-music")]
+    fn sync_output_menu(&mut self) {
+        let wait = Duration::from_secs(if self.devices.is_empty() { 5 } else { 30 });
+        if self.devices_fetched_at.is_none_or(|at| at.elapsed() > wait) {
+            self.refresh_devices();
+        }
+        let on_speaker = self.devices.iter().any(|device| device.is_active);
+        let mut outputs = vec![(
+            crate::apple::DEVICE_ID.to_owned(),
+            "This Mac".to_owned(),
+            !on_speaker,
+        )];
+        outputs.extend(self.devices.iter().filter_map(|device| {
+            Some((device.id.clone()?, device.name.clone(), device.is_active))
+        }));
+        if outputs != self.output_menu {
+            let rows: Vec<(String, bool)> = outputs
+                .iter()
+                .map(|(_, name, active)| (name.clone(), *active))
+                .collect();
+            crate::mac_menu::set_outputs(&rows);
+            self.output_menu = outputs;
+        }
+    }
+
     fn refresh_devices(&mut self) {
         if !self.is_connected() || self.devices_loading {
             return;
@@ -9832,7 +9868,9 @@ impl App {
             }
             ApiResponse::Transferred { device_id, result } => match result {
                 Ok(()) => {
-                    self.selected_device = Some(device_id);
+                    // Apple Music's player stays here; only its sound moved.
+                    self.selected_device =
+                        (!cfg!(all(feature = "apple-music", not(test)))).then_some(device_id);
                     self.show_devices = false;
                     self.remote_command_at = Some(Instant::now());
                     self.poll_remote_soon();
@@ -11410,6 +11448,19 @@ impl App {
     }
 
     fn transfer(&mut self, device_id: String) {
+        // The player stays here either way: only where its sound goes changes.
+        #[cfg(all(feature = "apple-music", not(test)))]
+        {
+            self.selected_device = None;
+            self.show_devices = false;
+            self.backend.api(ApiRequest::Transfer {
+                device_id,
+                play: false,
+            });
+            self.refresh_devices();
+            return;
+        }
+        #[allow(unreachable_code)]
         if self
             .pending_remote_volume
             .as_ref()

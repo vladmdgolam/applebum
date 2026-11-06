@@ -16,7 +16,7 @@ use tokio::sync::oneshot;
 
 use crate::api::ApiError;
 use crate::api::models::{
-    Album, Artist, ArtistRef, CursorPage, Cursors, Image, Owner, Page, PlayHistory, PlayableItem,
+    Album, Artist, ArtistRef, CursorPage, Cursors, Device, Image, Owner, Page, PlayHistory, PlayableItem,
     Playlist, PlaylistItem, Queue, SavedAlbum, SavedTrack, SearchResults, Track, TrackCount, User,
 };
 use crate::backend::{ApiRequest, ApiResponse, ApiResult, AuthStatus, Event, LocalPlayback, Waker};
@@ -46,6 +46,21 @@ unsafe extern "C" {
         context: *mut c_void,
         reply: Reply,
     );
+    fn am_tap_mute(muted: bool);
+    fn am_speakers_start();
+    fn am_speakers(context: *mut c_void, reply: Reply);
+    fn am_speaker_resolve(name: *const c_char, context: *mut c_void, reply: Reply);
+    fn am_airplay_start(
+        host: *const c_char,
+        port: u16,
+        name: *const c_char,
+        context: *mut c_void,
+        event: extern "C" fn(*mut c_void, i32, *const c_char),
+    ) -> *mut c_void;
+    fn am_airplay_push(session: *mut c_void, samples: *const f32, count: usize);
+    fn am_airplay_volume(session: *mut c_void, percent: f64);
+    fn am_airplay_stop(session: *mut c_void);
+    fn am_requeue(json: *const c_char, context: *mut c_void, reply: Reply);
     fn am_enqueue(id: *const c_char, context: *mut c_void, reply: Reply);
     fn am_queue(context: *mut c_void, reply: Reply);
 }
@@ -230,6 +245,160 @@ async fn enqueue(uri: &str) -> ApiResult<()> {
     } else {
         Err(ApiError::Decode(String::from_utf8_lossy(&body).into_owned()))
     }
+}
+
+// ---- AirPlay ----
+
+const SPEAKER_PREFIX: &str = "airplay-";
+
+/// Device IDs are limited to letters, digits, `-` and `_`, so a speaker's name
+/// travels in hex: "Living Room" has a space.
+fn speaker_id(name: &str) -> String {
+    let hex: String = name.bytes().map(|byte| format!("{byte:02x}")).collect();
+    format!("{SPEAKER_PREFIX}{hex}")
+}
+
+fn speaker_name(id: &str) -> Option<String> {
+    let hex = id.strip_prefix(SPEAKER_PREFIX)?;
+    let bytes: Option<Vec<u8>> = (0..hex.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(hex.get(at..at + 2)?, 16).ok())
+        .collect();
+    String::from_utf8(bytes?).ok()
+}
+
+struct Speaker {
+    name: String,
+    session: *mut c_void,
+}
+// SAFETY: the session is only used under `SPEAKER`'s lock, and its C++ side is
+// built for one thread pushing audio while another runs the sender.
+unsafe impl Send for Speaker {}
+
+/// The speaker this app's audio goes to, if any.
+static SPEAKER: std::sync::Mutex<Option<Speaker>> = std::sync::Mutex::new(None);
+static SPEAKER_STARTED: std::sync::Mutex<Option<oneshot::Sender<Result<(), String>>>> =
+    std::sync::Mutex::new(None);
+static EVENTS: std::sync::OnceLock<(std::sync::mpsc::Sender<Event>, Waker)> =
+    std::sync::OnceLock::new();
+
+fn speaker_lock() -> std::sync::MutexGuard<'static, Option<Speaker>> {
+    SPEAKER.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+extern "C" fn on_speaker_event(_context: *mut c_void, kind: i32, message: *const c_char) {
+    let message = if message.is_null() {
+        String::new()
+    } else {
+        // SAFETY: the sender passes a C string, valid for this call.
+        unsafe { std::ffi::CStr::from_ptr(message) }
+            .to_string_lossy()
+            .into_owned()
+    };
+    let starting = SPEAKER_STARTED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take();
+    if let Some(starting) = starting {
+        let _ = starting.send(if kind == 1 { Ok(()) } else { Err(message) });
+    } else if kind != 1 {
+        // The speaker went away mid-song: the music comes back on this Mac. The
+        // session is torn down elsewhere, since this runs on its own thread.
+        std::thread::spawn(|| {
+            leave_speaker();
+            if let Some((events, waker)) = EVENTS.get() {
+                emit(
+                    events,
+                    waker,
+                    Event::Error("Lost the speaker; playing on this Mac".to_owned()),
+                );
+            }
+        });
+    }
+}
+
+/// Back to this Mac. Unmutes first, so the music is never silent in between.
+fn leave_speaker() {
+    // SAFETY: am_tap_mute only reads its plain argument.
+    unsafe { am_tap_mute(false) };
+    let leaving = speaker_lock().take();
+    if let Some(speaker) = leaving {
+        // SAFETY: taking it out of `SPEAKER` makes this the session's last use.
+        unsafe { am_airplay_stop(speaker.session) };
+        log::info!("apple: stopped streaming to {}", speaker.name);
+    }
+}
+
+async fn route_to(device_id: &str) -> ApiResult<()> {
+    let failed = |message: String| ApiError::Status { status: 0, message };
+    let Some(name) = speaker_name(device_id) else {
+        // Stopping joins the sender's thread, which flushes its goodbye.
+        let _ = tokio::task::spawn_blocking(leave_speaker).await;
+        return Ok(());
+    };
+    let name = name.as_str();
+    let began = Instant::now();
+    let _ = tokio::task::spawn_blocking(leave_speaker).await;
+    let wanted = c_string(name);
+    let (status, body) =
+        call(|context, reply| unsafe { am_speaker_resolve(wanted.as_ptr(), context, reply) }).await;
+    if status != 200 {
+        return Err(failed(String::from_utf8_lossy(&body).into_owned()));
+    }
+    let address: Value =
+        serde_json::from_slice(&body).map_err(|error| failed(error.to_string()))?;
+    let host = c_string(address["host"].as_str().unwrap_or_default());
+    let port = address["port"].as_u64().unwrap_or(7000) as u16;
+    log::info!("apple: connecting to {name} at {host:?}:{port}");
+    let (started, starting) = oneshot::channel();
+    *SPEAKER_STARTED.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(started);
+    // SAFETY: the sender copies its strings before returning.
+    let session = unsafe {
+        am_airplay_start(host.as_ptr(), port, wanted.as_ptr(), std::ptr::null_mut(), on_speaker_event)
+    };
+    *speaker_lock() = Some(Speaker {
+        name: name.to_owned(),
+        session,
+    });
+    let outcome = tokio::time::timeout(Duration::from_secs(15), starting).await;
+    match outcome {
+        Ok(Ok(Ok(()))) => {
+            // Only now: if the speaker had failed, the music would have kept playing here.
+            unsafe { am_tap_mute(true) };
+            log::info!("apple: streaming to {name}, {} ms to connect", began.elapsed().as_millis());
+            Ok(())
+        }
+        other => {
+            let _ = tokio::task::spawn_blocking(leave_speaker).await;
+            let reason = match other {
+                Ok(Ok(Err(reason))) => reason,
+                _ => "it didn't answer in time".to_owned(),
+            };
+            log::warn!("apple: couldn't stream to {name}: {reason}");
+            Err(failed(format!("Couldn't connect to {name}: {reason}")))
+        }
+    }
+}
+
+async fn speakers() -> ApiResult<Vec<Device>> {
+    let (_, body) = call(|context, reply| unsafe { am_speakers(context, reply) }).await;
+    let found: Value = serde_json::from_slice(&body).unwrap_or_default();
+    log::info!("apple: speakers on the network: {}", found["names"]);
+    let current = speaker_lock().as_ref().map(|speaker| speaker.name.clone());
+    Ok(found["names"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|name| name.as_str())
+        .map(|name| Device {
+            id: Some(speaker_id(name)),
+            name: name.to_owned(),
+            is_active: current.as_deref() == Some(name),
+            supports_volume: Some(true),
+            kind: "Speaker".to_owned(),
+            ..Default::default()
+        })
+        .collect())
 }
 
 fn encode(term: &str) -> String {
@@ -517,7 +686,11 @@ fn account() -> User {
 pub async fn dispatch(request: &ApiRequest) -> Option<ApiResponse> {
     Some(match request {
         ApiRequest::Me => ApiResponse::Me(Ok(account())),
-        ApiRequest::Devices => ApiResponse::Devices(Ok(Vec::new())),
+        ApiRequest::Devices => ApiResponse::Devices(speakers().await),
+        ApiRequest::Transfer { device_id, .. } => ApiResponse::Transferred {
+            device_id: device_id.clone(),
+            result: route_to(device_id).await,
+        },
         // Nothing plays elsewhere: the player here is the only one.
         ApiRequest::PlaybackState { seq } => ApiResponse::PlaybackState {
             seq: *seq,
@@ -768,9 +941,91 @@ fn start_index(spec: &LoadSpec, ids: &[String]) -> usize {
     spec.offset_index.unwrap_or(0) as usize
 }
 
+/// The playlist the queue came from, and the order it was in.
+struct Following {
+    playlist: String,
+    ids: Vec<String>,
+}
+
+static FOLLOWING: std::sync::Mutex<Option<Following>> = std::sync::Mutex::new(None);
+
+fn following_lock() -> std::sync::MutexGuard<'static, Option<Following>> {
+    FOLLOWING.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// A playlist's songs in order, by catalog ID where they have one, with the
+/// library ID of each for songs the catalog won't return, as uploads may be.
+async fn playlist_songs(
+    playlist: &str,
+) -> ApiResult<(Vec<String>, serde_json::Map<String, Value>)> {
+    let mut ids = Vec::new();
+    let mut library_ids = serde_json::Map::new();
+    let mut offset = 0;
+    loop {
+        let found = or_empty(
+            get(&format!(
+                "/v1/me/library/playlists/{playlist}/tracks?limit=100&offset={offset}"
+            ))
+            .await,
+        )?;
+        let songs = found["data"].as_array().cloned().unwrap_or_default();
+        let more = found["next"].is_string();
+        offset += songs.len() as u32;
+        for song in &songs {
+            let library = text(song, "id");
+            match song["attributes"]["playParams"]["catalogId"].as_str() {
+                Some(catalog) => {
+                    library_ids.insert(catalog.to_owned(), json!(library));
+                    ids.push(catalog.to_owned());
+                }
+                None => ids.push(library),
+            }
+        }
+        if !more || offset >= 1000 {
+            return Ok((ids, library_ids));
+        }
+    }
+}
+
+/// Keeps the queue in step with changes made to its playlist elsewhere, as in
+/// Music.app, once Apple has synced them. The song playing isn't interrupted.
+async fn follow_playlist(client: Client) {
+    loop {
+        tokio::time::sleep(Duration::from_secs(20)).await;
+        let Some(playlist) = following_lock().as_ref().map(|following| following.playlist.clone())
+        else {
+            continue;
+        };
+        let Ok((ids, library_ids)) = playlist_songs(&playlist).await else {
+            continue;
+        };
+        // Skipped unless this is still the playlist and its order really changed.
+        let changed = following_lock().as_ref().is_some_and(|following| {
+            following.playlist == playlist && following.ids != ids
+        });
+        if !changed || ids.is_empty() {
+            continue;
+        }
+        let request = c_string(&json!({"ids": ids, "libraryIDs": library_ids}).to_string());
+        let (status, body) =
+            call(|context, reply| unsafe { am_requeue(request.as_ptr(), context, reply) }).await;
+        let reply = String::from_utf8_lossy(&body);
+        if status == 200 && reply.contains("\"applied\":true") {
+            if let Some(following) = following_lock().as_mut()
+                && following.playlist == playlist
+            {
+                following.ids = ids;
+            }
+            log::info!("apple: the playlist changed, queue updated ({reply})");
+            emit(&client.events, &client.waker, Event::RemoteChanged);
+        }
+    }
+}
+
 async fn load(spec: LoadSpec, warm: bool) -> anyhow::Result<()> {
     let began = Instant::now();
     let mut library_ids = serde_json::Map::new();
+    let mut next_following = None;
     let mut ids: Vec<String> = spec
         .uris
         .iter()
@@ -802,32 +1057,13 @@ async fn load(spec: LoadSpec, warm: bool) -> anyhow::Result<()> {
             .and_then(|context| context.strip_prefix("spotify:playlist:"))
     {
         // Every song, so the queue is the whole playlist from the chosen one on.
-        let mut offset = 0;
-        loop {
-            let found = or_empty(
-                get(&format!(
-                    "/v1/me/library/playlists/{playlist}/tracks?limit=100&offset={offset}"
-                ))
-                .await,
-            )
+        (ids, library_ids) = playlist_songs(playlist)
+            .await
             .map_err(|error| anyhow::anyhow!("{error}"))?;
-            let songs = found["data"].as_array().cloned().unwrap_or_default();
-            let more = found["next"].is_string();
-            offset += songs.len() as u32;
-            for song in &songs {
-                let library = text(song, "id");
-                match song["attributes"]["playParams"]["catalogId"].as_str() {
-                    Some(catalog) => {
-                        library_ids.insert(catalog.to_owned(), json!(library));
-                        ids.push(catalog.to_owned());
-                    }
-                    None => ids.push(library),
-                }
-            }
-            if !more || offset >= 1000 {
-                break;
-            }
-        }
+        next_following = Some(Following {
+            playlist: playlist.to_owned(),
+            ids: ids.clone(),
+        });
     }
     if ids.is_empty() {
         anyhow::bail!(
@@ -850,6 +1086,10 @@ async fn load(spec: LoadSpec, warm: bool) -> anyhow::Result<()> {
     let body = String::from_utf8_lossy(&body);
     if status != 200 {
         anyhow::bail!("{body}");
+    }
+    // A warm-up that found a song already loaded changed nothing.
+    if !body.contains("skipped") {
+        *following_lock() = next_following;
     }
     log::info!(
         "apple: load answered in {} ms ({body})",
@@ -939,6 +1179,7 @@ impl Client {
         waker: Waker,
         tap: Arc<crate::vis::AudioTap>,
     ) -> Self {
+        let _ = EVENTS.set((events.clone(), waker.clone()));
         let client = Self {
             events,
             waker,
@@ -982,9 +1223,12 @@ impl Client {
                 }),
             );
             start_tap(tap);
+            // SAFETY: takes no arguments and keeps its own state.
+            unsafe { am_speakers_start() };
             // The last song, paused: somewhere to resume, and the player's
             // process is already up when the first song is chosen.
             tokio::spawn(warm_up(starting.clone()));
+            tokio::spawn(follow_playlist(starting.clone()));
             starting.report_state().await;
         });
         client
@@ -1051,11 +1295,16 @@ impl Client {
                     }
                 });
             }
-            // MusicKit has no per-app volume, and these have no meaning here yet.
-            PlayerCommand::Volume(_)
-            | PlayerCommand::VolumePreview(_)
-            | PlayerCommand::ClearQueue
-            | PlayerCommand::Transfer => {}
+            // MusicKit has no volume of its own, but a speaker we stream to does.
+            PlayerCommand::Volume(volume) | PlayerCommand::VolumePreview(volume) => {
+                if let Some(speaker) = speaker_lock().as_ref() {
+                    // SAFETY: the lock keeps the session alive for this call.
+                    unsafe {
+                        am_airplay_volume(speaker.session, f64::from(volume) / f64::from(u16::MAX) * 100.0);
+                    }
+                }
+            }
+            PlayerCommand::ClearQueue | PlayerCommand::Transfer => {}
             PlayerCommand::AddToQueue(uri) => {
                 let client = self.clone();
                 tokio::spawn(async move {
@@ -1193,14 +1442,22 @@ extern "C" fn on_audio(context: *mut c_void, samples: *const f32, count: usize, 
     if guard.as_ref().is_none_or(|(known, _)| *known != rate) {
         *guard = Some((rate, crate::resample::Resampler::new(rate, VIS_RATE, 2)));
     }
-    let wide: Vec<f64> = match guard.as_mut().and_then(|(_, resampler)| resampler.as_mut()) {
+    let mut resampled = Vec::new();
+    let narrow: &[f32] = match guard.as_mut().and_then(|(_, resampler)| resampler.as_mut()) {
         Some(resampler) => {
-            let mut out = Vec::with_capacity(count * 2);
-            resampler.process_into(samples, &mut out);
-            out.into_iter().map(f64::from).collect()
+            resampled.reserve(count * 2);
+            resampler.process_into(samples, &mut resampled);
+            &resampled
         }
-        None => samples.iter().copied().map(f64::from).collect(),
+        None => samples,
     };
+    if let Ok(speaker) = SPEAKER.try_lock()
+        && let Some(speaker) = speaker.as_ref()
+    {
+        // SAFETY: the lock keeps the session alive; the slice outlives the call.
+        unsafe { am_airplay_push(speaker.session, narrow.as_ptr(), narrow.len()) };
+    }
+    let wide: Vec<f64> = narrow.iter().copied().map(f64::from).collect();
     sink.tap.push(&wide, 1.0);
 }
 

@@ -151,4 +151,58 @@ fn apple_music_bridge() {
     }
     println!("cargo:rustc-link-search=native=/usr/lib/swift");
     println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
+    println!("cargo:rustc-link-lib=framework=Network");
+    airplay_sender(&out);
+}
+
+/// Builds the vendored AirPlay sender and our thin wrapper around it.
+#[cfg(feature = "apple-music")]
+fn airplay_sender(out: &str) {
+    let source = "third_party/airplay2-sender-cpp";
+    println!("cargo:rerun-if-changed={source}/VENDORED_COMMIT");
+    println!("cargo:rerun-if-changed=src/apple/native/airplay.cpp");
+    let build = format!("{out}/airplay");
+    let configured = std::process::Command::new("cmake")
+        .args(["-S", source, "-B", &build, "-DCMAKE_BUILD_TYPE=Release"])
+        .args(["-DAIRPLAY_BUILD_EXAMPLE=OFF", "-DAIRPLAY_BUILD_TESTS=OFF"])
+        .arg("-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0")
+        .status()
+        .expect("cmake runs");
+    assert!(configured.success(), "the AirPlay sender didn't configure");
+    let built = std::process::Command::new("cmake")
+        .args(["--build", &build, "--target", "raop_sender", "-j"])
+        .status()
+        .expect("cmake runs");
+    assert!(built.success(), "the AirPlay sender didn't build");
+    cc::Build::new()
+        .cpp(true)
+        .std("c++20")
+        .include(format!("{source}/src"))
+        .file("src/apple/native/airplay.cpp")
+        .flag("-mmacosx-version-min=15.0")
+        .compile("am_airplay");
+    // Dependents first, for the linker.
+    for library in ["raop_sender", "airplay_crypto", "ed25519", "mbedcrypto"] {
+        let file = format!("lib{library}.a");
+        let folder = find_file(std::path::Path::new(&build), &file)
+            .unwrap_or_else(|| panic!("{file} wasn't built"));
+        println!("cargo:rustc-link-search=native={}", folder.display());
+        println!("cargo:rustc-link-lib=static={library}");
+    }
+}
+
+/// The folder under `root` that holds `file`.
+#[cfg(feature = "apple-music")]
+fn find_file(root: &std::path::Path, file: &str) -> Option<std::path::PathBuf> {
+    for entry in std::fs::read_dir(root).ok()?.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_file(&path, file) {
+                return Some(found);
+            }
+        } else if path.file_name().is_some_and(|name| name == file) {
+            return Some(root.to_path_buf());
+        }
+    }
+    None
 }

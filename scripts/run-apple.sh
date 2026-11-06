@@ -19,10 +19,10 @@ plutil -replace CFBundleDisplayName -string Applebum "$plist"
 plutil -replace CFBundleIconFile -string applebum "$plist"
 plutil -replace NSAppleMusicUsageDescription -string "Search and play Apple Music, and show your library." "$plist"
 plutil -replace NSAudioCaptureUsageDescription -string "Lets the visualizers react to the song playing. Nothing is recorded." "$plist"
-# Spotify's links and speakers mean nothing here.
-for key in CFBundleURLTypes NSBonjourServices NSLocalNetworkUsageDescription; do
-    plutil -remove "$key" "$plist" 2>/dev/null || true
-done
+# Spotify's links mean nothing here; HomePods are found on the local network.
+plutil -remove CFBundleURLTypes "$plist" 2>/dev/null || true
+plutil -replace NSBonjourServices -json '["_airplay._tcp"]' "$plist"
+plutil -replace NSLocalNetworkUsageDescription -string "Finds your HomePods so Applebum can play on them." "$plist"
 iconset="$(mktemp -d)/applebum.iconset"
 mkdir -p "$iconset"
 for size in 16 32 128 256 512; do

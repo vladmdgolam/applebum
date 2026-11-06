@@ -4,6 +4,7 @@ import AudioToolbox
 import CoreAudio
 import Foundation
 import MusicKit
+import Network
 
 public typealias AMReply = @convention(c) (UnsafeMutableRawPointer?, Int32, UnsafePointer<UInt8>?, Int) -> Void
 public typealias AMAudio = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<Float>?, Int, UInt32) -> Void
@@ -296,6 +297,45 @@ public func amLoad(_ json: UnsafePointer<CChar>, _ context: UnsafeMutableRawPoin
   }
 }
 
+/// Rearranges what comes after the current song to follow `ids`, leaving the song
+/// itself playing. {"ids":[...], "libraryIDs":{...}}. Replies {"applied":bool}.
+@_cdecl("am_requeue")
+public func amRequeue(_ json: UnsafePointer<CChar>, _ context: UnsafeMutableRawPointer?, _ reply: @escaping AMReply) {
+  let pending = Pending(context: context, reply: reply)
+  let text = String(cString: json)
+  Task { @MainActor in
+    do {
+      let player = ApplicationMusicPlayer.shared
+      guard let spec = try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+        let ids = spec["ids"] as? [String],
+        player.state.shuffleMode == .off,
+        let current = player.queue.currentEntry,
+        let position = player.queue.entries.firstIndex(where: { $0.id == current.id })
+      else {
+        pending.sendJSON(["applied": false])
+        return
+      }
+      let window = Array(ids.prefix(300))
+      let songs = try await resolveSongs(window, libraryIDs: spec["libraryIDs"] as? [String: String] ?? [:])
+      // Songs after the current one in the new order; all of them if it was removed.
+      var upcoming = songs
+      if case let .song(playing)? = current.item,
+        let at = songs.firstIndex(where: { $0.id == playing.id })
+      {
+        upcoming = Array(songs[songs.index(after: at)...])
+      } else if let wanted = current.item?.id.rawValue, let at = songs.firstIndex(where: { $0.id.rawValue == wanted }) {
+        upcoming = Array(songs[songs.index(after: at)...])
+      }
+      let entries = player.queue.entries
+      let start = entries.index(after: position)
+      player.queue.entries.replaceSubrange(start..<entries.endIndex, with: upcoming.map { ApplicationMusicPlayer.Queue.Entry($0) })
+      pending.sendJSON(["applied": true, "upcoming": upcoming.count])
+    } catch {
+      pending.send(-1, String(describing: error))
+    }
+  }
+}
+
 /// 1 toggle, 2 next, 3 previous, 4 seek to `value` ms, 5 shuffle `value` != 0,
 /// 6 repeat (0 off, 1 all, 2 one), 7 stop.
 @_cdecl("am_control")
@@ -417,6 +457,9 @@ private func playerProcess() -> AudioObjectID? {
 }
 
 private final class PlayerTap: @unchecked Sendable {
+  private let lock = NSLock()
+  private var muted = false
+  private var description: CATapDescription?
   private var tap = AudioObjectID(kAudioObjectUnknown)
   private var device = AudioObjectID(kAudioObjectUnknown)
   private var procID: AudioDeviceIOProcID?
@@ -445,6 +488,8 @@ private final class PlayerTap: @unchecked Sendable {
 
   /// Follows the player process and the default output as they come and go.
   func refresh() {
+    lock.lock()
+    defer { lock.unlock() }
     let process = playerProcess()
     let output = defaultOutput()
     if process == source, output.id == outputDevice { return }
@@ -457,7 +502,8 @@ private final class PlayerTap: @unchecked Sendable {
     let description = CATapDescription(stereoMixdownOfProcesses: [process])
     description.uuid = UUID()
     description.isPrivate = true
-    description.muteBehavior = .unmuted
+    description.muteBehavior = muted ? .mutedWhenTapped : .unmuted
+    self.description = description
     guard AudioHardwareCreateProcessTap(description, &tap) == noErr else {
       NSLog("am tap: could not create")
       return
@@ -502,6 +548,17 @@ private final class PlayerTap: @unchecked Sendable {
     outputDevice = output.id
   }
 
+  fileprivate var tapIsOpen: Bool { tap != kAudioObjectUnknown }
+
+  fileprivate func updateTap(_ description: CATapDescription) {
+    var property = address(kAudioTapPropertyDescription)
+    var value = description
+    let status = withUnsafePointer(to: &value) {
+      AudioObjectSetPropertyData(tap, &property, 0, nil, UInt32(MemoryLayout<CATapDescription>.size), $0)
+    }
+    if status != noErr { NSLog("am tap: could not change muting: %d", status) }
+  }
+
   private func close() {
     if let procID {
       AudioDeviceStop(device, procID)
@@ -517,14 +574,143 @@ private final class PlayerTap: @unchecked Sendable {
   }
 }
 
+/// Silences the player on this Mac while its audio goes to a speaker, or brings it back.
+private nonisolated(unsafe) var sharedTap: PlayerTap?
+
+extension PlayerTap {
+  func setMuted(_ wanted: Bool) {
+    lock.lock()
+    defer { lock.unlock() }
+    muted = wanted
+    guard tapIsOpen, let description else { return }
+    description.muteBehavior = wanted ? .mutedWhenTapped : .unmuted
+    updateTap(description)
+  }
+}
+
+@_cdecl("am_tap_mute")
+public func amTapMute(_ muted: Bool) {
+  sharedTap?.setMuted(muted)
+}
+
 /// Starts following the player's audio for the life of the app. Rust keeps `context` alive.
 @_cdecl("am_tap_start")
 public func amTapStart(_ context: UnsafeMutableRawPointer?, _ callback: @escaping AMAudio) {
   let tap = PlayerTap(context: context, callback: callback)
+  sharedTap = tap
   Task.detached(priority: .utility) {
     while true {
       tap.refresh()
       try? await Task.sleep(for: .seconds(1))
     }
+  }
+}
+
+// MARK: - Speakers
+
+/// HomePods on the network. Other AirPlay receivers ask for a PIN or are this Mac.
+private final class Speakers: @unchecked Sendable {
+  static let shared = Speakers()
+  private let lock = NSLock()
+  private var found: [String: NWEndpoint] = [:]
+  private let queue = DispatchQueue(label: "am.speakers")
+  private var browser: NWBrowser?
+
+  func start() {
+    let browser = NWBrowser(for: .bonjourWithTXTRecord(type: "_airplay._tcp", domain: nil), using: .tcp)
+    browser.browseResultsChangedHandler = { [weak self] results, _ in
+      var speakers: [String: NWEndpoint] = [:]
+      for result in results {
+        guard case let .service(name, _, _, _) = result.endpoint,
+          case let .bonjour(record) = result.metadata,
+          record["model"]?.hasPrefix("AudioAccessory") == true
+        else { continue }
+        speakers[name] = result.endpoint
+      }
+      NSLog("am speakers: %d results, %d HomePods", results.count, speakers.count)
+      self?.lock.lock()
+      self?.found = speakers
+      self?.lock.unlock()
+    }
+    browser.stateUpdateHandler = { state in
+      NSLog("am speakers: browser state %@", String(describing: state))
+    }
+    browser.start(queue: queue)
+    self.browser = browser
+  }
+
+  var names: [String] {
+    lock.lock()
+    defer { lock.unlock() }
+    return found.keys.sorted()
+  }
+
+  func endpoint(_ name: String) -> NWEndpoint? {
+    lock.lock()
+    defer { lock.unlock() }
+    return found[name]
+  }
+}
+
+@_cdecl("am_speakers_start")
+public func amSpeakersStart() {
+  Speakers.shared.start()
+}
+
+@_cdecl("am_speakers")
+public func amSpeakers(_ context: UnsafeMutableRawPointer?, _ reply: @escaping AMReply) {
+  let pending = Pending(context: context, reply: reply)
+  pending.sendJSON(["names": Speakers.shared.names])
+}
+
+/// Connects once to find the speaker's IPv4 address: {"host":"...","port":7000}.
+@_cdecl("am_speaker_resolve")
+public func amSpeakerResolve(_ name: UnsafePointer<CChar>, _ context: UnsafeMutableRawPointer?, _ reply: @escaping AMReply) {
+  let pending = Pending(context: context, reply: reply)
+  guard let endpoint = Speakers.shared.endpoint(String(cString: name)) else {
+    pending.send(-1, "That speaker isn't on the network right now")
+    return
+  }
+  let parameters = NWParameters.tcp
+  if let ip = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options { ip.version = .v4 }
+  let connection = NWConnection(to: endpoint, using: parameters)
+  let finished = OSAllocatedUnfairLockBox()
+  connection.stateUpdateHandler = { state in
+    switch state {
+    case .ready:
+      guard finished.claim() else { return }
+      if case let .hostPort(host, port)? = connection.currentPath?.remoteEndpoint {
+        let address = "\(host)".split(separator: "%").first.map(String.init) ?? "\(host)"
+        pending.sendJSON(["host": address, "port": Int(port.rawValue)])
+      } else {
+        pending.send(-1, "The speaker didn't report an address")
+      }
+      connection.cancel()
+    case let .failed(error):
+      guard finished.claim() else { return }
+      pending.send(-1, String(describing: error))
+      connection.cancel()
+    default:
+      break
+    }
+  }
+  connection.start(queue: .global())
+  DispatchQueue.global().asyncAfter(deadline: .now() + 8) {
+    guard finished.claim() else { return }
+    pending.send(-1, "Timed out reaching the speaker")
+    connection.cancel()
+  }
+}
+
+/// Lets exactly one of several callbacks answer.
+private final class OSAllocatedUnfairLockBox: @unchecked Sendable {
+  private let lock = NSLock()
+  private var done = false
+  func claim() -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    if done { return false }
+    done = true
+    return true
   }
 }

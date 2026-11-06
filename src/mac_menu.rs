@@ -28,6 +28,8 @@ pub enum MenuCommand {
     Copy,
     Paste,
     SelectAll,
+    /// A row of the Output menu, by its place in the list last given to `set_outputs`.
+    Output(u8),
 }
 
 /// The Dock menu's first item, which names what a click will do.
@@ -54,6 +56,9 @@ pub fn drain_dock_commands() -> Vec<MenuCommand> {
 #[cfg(not(target_os = "macos"))]
 pub fn set_playing(_playing: bool) {}
 
+#[cfg(not(target_os = "macos"))]
+pub fn set_outputs(_outputs: &[(String, bool)]) {}
+
 #[cfg(target_os = "macos")]
 pub use mac_impl::*;
 
@@ -61,7 +66,7 @@ pub use mac_impl::*;
 mod mac_impl {
     use objc2::rc::Retained;
     use objc2::runtime::{AnyClass, AnyObject, MethodImplementation, Sel};
-    use objc2::{MainThreadOnly, define_class, sel};
+    use objc2::{MainThreadOnly, define_class, msg_send, sel};
     use objc2_app_kit::{NSApplication, NSEventModifierFlags, NSMenu, NSMenuItem};
     use objc2_foundation::{MainThreadMarker, NSObject, NSString, ns_string};
     use std::cell::OnceCell;
@@ -82,6 +87,8 @@ mod mac_impl {
     thread_local! {
         /// The object the menu items call. Only the main thread touches it.
         static HANDLER: OnceCell<Retained<SpotifastMenuHandler>> = const { OnceCell::new() };
+        /// The Output submenu, filled by `set_outputs`.
+        static OUTPUT_MENU: OnceCell<Retained<NSMenu>> = const { OnceCell::new() };
     }
 
     pub fn set_waker(wake: impl Fn() + Send + Sync + 'static) {
@@ -134,6 +141,39 @@ mod mac_impl {
     /// for the menu each time it opens, so the next one reads this.
     pub fn set_playing(playing: bool) {
         PLAYING.store(playing, Ordering::Relaxed);
+    }
+
+    /// Fills the Output menu: each output's name, and whether the sound goes there.
+    pub fn set_outputs(outputs: &[(String, bool)]) {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        OUTPUT_MENU.with(|menu| {
+            let Some(menu) = menu.get() else {
+                return;
+            };
+            HANDLER.with(|handler| {
+                let target = handler.get().map(|handler| {
+                    let object: &NSObject = handler;
+                    object
+                });
+                menu.removeAllItems();
+                for (row, (name, active)) in outputs.iter().enumerate() {
+                    let item = create_item(
+                        mtm,
+                        &NSString::from_str(name),
+                        Some(sel!(selectOutput:)),
+                        ns_string!(""),
+                        None,
+                        target,
+                    );
+                    let state: isize = if *active { 1 } else { 0 };
+                    let () = unsafe { msg_send![&*item, setTag: row as isize] };
+                    let () = unsafe { msg_send![&*item, setState: state] };
+                    menu.addItem(&item);
+                }
+            });
+        });
     }
 
     define_class!(
@@ -271,6 +311,12 @@ mod mac_impl {
             #[unsafe(method(editSelectAll:))]
             fn edit_select_all(&self, _sender: &NSObject) {
                 push_command(MenuCommand::SelectAll);
+            }
+
+            #[unsafe(method(selectOutput:))]
+            fn select_output(&self, sender: &NSObject) {
+                let row: isize = unsafe { msg_send![sender, tag] };
+                push_command(MenuCommand::Output(row as u8));
             }
 
             #[unsafe(method(dockPlayPause:))]
@@ -591,6 +637,12 @@ mod mac_impl {
             None,
             Some(target),
         ));
+        playback_menu.addItem(&NSMenuItem::separatorItem(mtm));
+        let (output_item, output_menu) = create_menu(mtm, ns_string!("Output"));
+        playback_menu.addItem(&output_item);
+        OUTPUT_MENU.with(|menu| {
+            let _ = menu.set(output_menu);
+        });
         menubar.addItem(&playback_item);
 
         // 5. View menu

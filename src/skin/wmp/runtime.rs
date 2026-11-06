@@ -523,6 +523,16 @@ impl Runtime {
                 );
             }
             if old.queue != new.queue {
+                // A list that shrank can leave its scroll past the end, which
+                // draws nothing until the wheel next clamps it.
+                let last = new.queue.len().saturating_sub(1) as f64;
+                let state = &mut self.views[index].state;
+                for element in &mut state.elements {
+                    if element.kind == Kind::Playlist && element.scroll > last {
+                        element.scroll = last;
+                        state.changed = true;
+                    }
+                }
                 self.player_event(index, "playlistchange", &[("change", Value::Number(0.0))]);
                 self.player_event(
                     index,

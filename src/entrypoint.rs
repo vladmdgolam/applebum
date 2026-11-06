@@ -1357,6 +1357,12 @@ impl Shell {
                 MenuCommand::VolumeUp => Action::VolumeBy(5),
                 MenuCommand::VolumeDown => Action::VolumeBy(-5),
                 MenuCommand::ToggleMute => Action::ToggleMute,
+                MenuCommand::Output(row) => {
+                    let Some(id) = app.output_id(row) else {
+                        continue;
+                    };
+                    Action::Transfer(id)
+                }
                 MenuCommand::Home => Action::Open(Page::Home),
                 MenuCommand::Search => Action::FocusSearch,
                 MenuCommand::LikedSongs => Action::Open(Page::LikedSongs),
