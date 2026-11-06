@@ -70,20 +70,20 @@ impl Failure {
         match self {
             Self::Unsupported => gettext(
                 locale,
-                "Spotify has not published Soloist for this platform. The built-in player remains available.",
+                "Apple Music has not published Soloist for this platform. The built-in player remains available.",
             ),
             Self::NotSignedIn => gettext(
                 locale,
-                "Spotify hasn't confirmed your sign-in yet. Try again in a moment.",
+                "Apple Music hasn't confirmed your sign-in yet. Try again in a moment.",
             ),
             Self::InvalidKey => gettext(locale, "That doesn't look like a Soloist key."),
             Self::KeyStore => gettext(
                 locale,
-                "Spotifast couldn't reach your saved key. Unlock the system credential store and try again.",
+                "Applebum couldn't reach your saved key. Unlock the system credential store and try again.",
             ),
             Self::Download => gettext(
                 locale,
-                "Spotifast couldn't download Soloist. Check your connection and try again.",
+                "Applebum couldn't download Soloist. Check your connection and try again.",
             ),
             Self::NotReady => gettext(
                 locale,
@@ -95,7 +95,7 @@ impl Failure {
             Self::AudioLost => gettext(locale, "Soloist lost its audio output."),
             Self::Expired => gettext(
                 locale,
-                "This Soloist build has expired, and Spotify hasn't published a new one yet.",
+                "This Soloist build has expired, and Apple Music hasn't published a new one yet.",
             ),
             Self::Other(error) => error.clone().into(),
         }
@@ -283,7 +283,7 @@ async fn run(args: Config, client: Client, mut stopped: watch::Receiver<bool>) -
             "{:x}",
             Sha256::digest(format!("{instance}:{}", data.to_string_lossy()).as_bytes())
         );
-        let name = format!("Spotifast Soloist ({})", &suffix[..8]);
+        let name = format!("Applebum Soloist ({})", &suffix[..8]);
         let build = if let Some(build) = install::saved(&root, "pending.json").await {
             build
         } else if let Some(build) = install::saved(&root, "current.json").await {
@@ -768,7 +768,7 @@ fn reclaim(builds: &std::path::Path, data: &std::path::Path) {
     if !ours || !process.kill() {
         return;
     }
-    log::info!("Stopped a Soloist left running by an earlier Spotifast");
+    log::info!("Stopped a Soloist left running by an earlier Applebum");
     let deadline = Instant::now() + Duration::from_secs(2);
     while !exited(&mut system, pid) && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(10));
@@ -1034,7 +1034,7 @@ mod tests {
     /// Explicit live smoke test, never run by normal tests or CI. The caller
     /// provides a personal key via a secret manager. No playback is started.
     #[tokio::test]
-    #[ignore = "downloads and starts Spotify Soloist; requires SOLOIST_QA_KEY from a secret manager"]
+    #[ignore = "downloads and starts Apple Music Soloist; requires SOLOIST_QA_KEY from a secret manager"]
     async fn native_start_and_stop() {
         let value = std::env::var("SOLOIST_QA_KEY").expect("SOLOIST_QA_KEY is required");
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

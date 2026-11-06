@@ -219,7 +219,7 @@ fn playlist(index: usize) -> Playlist {
                 "demo".into()
             }),
             display_name: Some(if spotify_owned {
-                "Spotify".into()
+                "Apple Music".into()
             } else {
                 "Carmine".into()
             }),
@@ -252,7 +252,7 @@ fn top_mix(index: usize) -> Playlist {
         images: image(600 + index as u32),
         owner: Owner {
             id: Some("spotify".into()),
-            display_name: Some("Spotify".into()),
+            display_name: Some("Apple Music".into()),
             uri: None,
         },
         tracks: Some(TrackCount { total: 50 }),
@@ -719,7 +719,7 @@ pub fn populate(app: &mut App) {
     app.devices = vec![
         Device {
             id: Some("local-demo".into()),
-            name: "Spotifast".into(),
+            name: "Applebum".into(),
             is_active: false,
             is_restricted: false,
             volume_percent: Some(70),
@@ -747,7 +747,7 @@ pub fn populate(app: &mut App) {
     ];
     // Include an unsigned ZeroConf receiver in the device picker.
     app.receivers = vec![crate::zeroconf::Receiver {
-        name: "House Spotify".into(),
+        name: "House Apple Music".into(),
         device_id: Some("house-speaker".into()),
         address: std::net::IpAddr::V4(std::net::Ipv4Addr::new(192, 168, 1, 42)),
         port: 5555,
@@ -1279,7 +1279,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>, show: Option<&str>) {
                         total: 14_000_000,
                     },
                     "soloist-pairing" => Status::Pairing {
-                        name: "Spotifast Soloist (12345678)".into(),
+                        name: "Applebum Soloist (12345678)".into(),
                         version: "1.3.10".into(),
                     },
                     "soloist-ready" | "soloist-playing" | "soloist-verifying" => {
@@ -1288,7 +1288,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>, show: Option<&str>) {
                         if surface == "soloist-playing" {
                             let device = Device {
                                 id: app.soloist_device_id.clone(),
-                                name: "Spotifast Soloist (12345678)".into(),
+                                name: "Applebum Soloist (12345678)".into(),
                                 kind: "speaker".into(),
                                 is_active: true,
                                 volume_percent: Some(62),
@@ -1305,7 +1305,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>, show: Option<&str>) {
                             }
                         }
                         Status::Ready {
-                            name: "Spotifast Soloist (12345678)".into(),
+                            name: "Applebum Soloist (12345678)".into(),
                             version: "1.3.10".into(),
                             expires: crate::soloist::install::now()
                                 + 75 * crate::soloist::install::DAY,
@@ -2165,7 +2165,7 @@ mod tests {
                     app.actions.push(Action::SettingsChanged);
                 }
                 if let Some(Dialog::EditPlaylist { cover, .. }) = &mut app.dialog {
-                    cover.error = Some("Spotify refused this cover. Check that you own the playlist, then sign in again to grant image upload permission.".into());
+                    cover.error = Some("Apple Music refused this cover. Check that you own the playlist, then sign in again to grant image upload permission.".into());
                 }
                 for _ in 0..3 {
                     let mut output = ctx.run_ui(
@@ -3816,7 +3816,7 @@ mod tests {
             let button = accessible_node(
                 &tree,
                 if setup {
-                    "Register Spotifast"
+                    "Register Applebum"
                 } else {
                     "Close banner"
                 },
@@ -3848,7 +3848,7 @@ mod tests {
             app.audio_key_banner = true;
             app.slow_banner = true;
             app.show_devices = false;
-            let title = "Spotify won't let this computer play this song right now.";
+            let title = "Apple Music won't let this computer play this song right now.";
             let shows = |tree: &egui::accesskit::TreeUpdate, text: &str| {
                 tree.nodes
                     .iter()
@@ -3863,7 +3863,7 @@ mod tests {
             let tree = accessible_frame(&ctx, &mut app, vec![]);
             assert!(shows(&tree, title));
             assert!(
-                !shows(&tree, "Spotify is being slow on the shared sign-in."),
+                !shows(&tree, "Apple Music is being slow on the shared sign-in."),
                 "one banner at a time, the audio key's first"
             );
             let button = accessible_node(
@@ -3903,7 +3903,7 @@ mod tests {
             let button = accessible_node(
                 &tree,
                 if setup {
-                    "Register Spotifast"
+                    "Register Applebum"
                 } else {
                     "Not now"
                 },
@@ -4196,7 +4196,7 @@ mod tests {
         app.dialog = Some(Dialog::PersonalAppIntro);
         accessible_frame(&ctx, &mut app, vec![]);
         let tree = accessible_frame(&ctx, &mut app, vec![]);
-        let setup = accessible_node(&tree, "Register Spotifast", Role::Button);
+        let setup = accessible_node(&tree, "Register Applebum", Role::Button);
         accessible_frame(
             &ctx,
             &mut app,
@@ -4497,13 +4497,13 @@ mod tests {
 
         app.settings.web_client_id = None;
         app.web_app = None;
-        let text = settings_text(&ctx, &mut app, "Spotifast registered");
+        let text = settings_text(&ctx, &mut app, "Applebum registered");
         assert!(!text.iter().any(|text| text == "Account"));
         assert!(text.iter().any(|text| text.starts_with("No settings for")));
         app.settings.web_client_id = Some("test-client".into());
         app.web_app = Some("test-client".into());
-        let text = settings_text(&ctx, &mut app, "Spotifast registered");
-        assert!(text.iter().any(|text| text == "Spotifast registered"));
+        let text = settings_text(&ctx, &mut app, "Applebum registered");
+        assert!(text.iter().any(|text| text == "Applebum registered"));
         app.backend.shutdown();
     }
 
@@ -4513,17 +4513,17 @@ mod tests {
         app.settings.web_client_id = None;
         app.web_app = None;
         let text = settings_text(&ctx, &mut app, "Account");
-        assert!(text.iter().any(|text| text == "Register Spotifast"));
+        assert!(text.iter().any(|text| text == "Register Applebum"));
 
         app.settings.web_client_id = Some("test-client".into());
         let text = settings_text(&ctx, &mut app, "Account");
-        assert!(text.iter().any(|text| text == "Register Spotifast"));
+        assert!(text.iter().any(|text| text == "Register Applebum"));
         assert!(text.iter().any(|text| text == "Authorize your Client ID"));
 
         app.web_app = Some("test-client".into());
         let text = settings_text(&ctx, &mut app, "Account");
-        assert!(text.iter().any(|text| text == "Spotifast registered"));
-        assert!(!text.iter().any(|text| text == "Register Spotifast"));
+        assert!(text.iter().any(|text| text == "Applebum registered"));
+        assert!(!text.iter().any(|text| text == "Register Applebum"));
         assert!(!text.iter().any(|text| text == "Setup guide"));
         app.backend.shutdown();
     }
@@ -8164,7 +8164,7 @@ mod tests {
                             "{:?} is cut off at {size:?} in {state:?}",
                             text.galley.job.text
                         );
-                        if text.galley.job.text == "Spotifast" {
+                        if text.galley.job.text == "Applebum" {
                             title = Some(rect);
                         }
                     }
@@ -9159,7 +9159,7 @@ mod tests {
             assert!(text.iter().any(|(s, _)| s == "Authorize"), "{text:?}");
             assert!(
                 text.iter()
-                    .any(|(s, _)| s == "Connect Spotify to see listening activity."),
+                    .any(|(s, _)| s == "Connect Apple Music to see listening activity."),
                 "{text:?}"
             );
         }
@@ -9204,9 +9204,9 @@ mod tests {
         app.selected_device = Some("own-soloist".into());
         app.local_ready = false;
         app.local_playback = LocalPlayback::Unavailable;
-        for query in ["Spotify access", "lyrics", "activity", "Made for you"] {
+        for query in ["Apple Music access", "lyrics", "activity", "Made for you"] {
             let text = settings_text(&ctx, &mut app, query);
-            assert!(text.iter().any(|s| s == "Spotify access"), "{text:?}");
+            assert!(text.iter().any(|s| s == "Apple Music access"), "{text:?}");
             assert!(text.iter().any(|s| s == "Authorize"), "{text:?}");
         }
         for (state, label, can_authorize) in [
@@ -9217,7 +9217,7 @@ mod tests {
                 "Finish authorizing in your browser.",
                 false,
             ),
-            (LocalPlayback::Connecting, "Connecting to Spotify…", false),
+            (LocalPlayback::Connecting, "Connecting to Apple Music…", false),
             (
                 LocalPlayback::WaitingForNetwork,
                 "Waiting for network…",
@@ -9232,7 +9232,7 @@ mod tests {
             ),
         ] {
             app.local_playback = state;
-            settings_text(&ctx, &mut app, "Spotify access");
+            settings_text(&ctx, &mut app, "Apple Music access");
             let text = view_frame(&ctx, &mut app, vec![], crate::ui::settings::show);
             let pos = text
                 .iter()
@@ -9277,7 +9277,7 @@ mod tests {
         }
         app.settings.soloist_enabled = false;
         let text = settings_text(&ctx, &mut app, "lyrics");
-        assert!(!text.iter().any(|s| s == "Spotify access"));
+        assert!(!text.iter().any(|s| s == "Apple Music access"));
         app.backend.shutdown();
     }
 
@@ -9291,16 +9291,16 @@ mod tests {
         // A matching name is not proof that a player belongs to this process.
         app.devices.push(Device {
             id: Some("someone-elses-soloist".into()),
-            name: "Spotifast Soloist (12345678)".into(),
+            name: "Applebum Soloist (12345678)".into(),
             kind: "speaker".into(),
             ..Default::default()
         });
         accessible_frame(&ctx, &mut app, vec![]);
         let tree = accessible_frame(&ctx, &mut app, vec![]);
         accessible_node(&tree, "This computer", Role::Button);
-        accessible_node(&tree, "Spotifast Soloist (12345678)", Role::Button);
+        accessible_node(&tree, "Applebum Soloist (12345678)", Role::Button);
         assert!(!tree.nodes.iter().any(|(_, n)| n.label().is_some_and(|s| {
-            s.starts_with("Playing on") || s == "Spotifast (this computer)" || s == "Audio output"
+            s.starts_with("Playing on") || s == "Applebum (this computer)" || s == "Audio output"
         })));
         assert!(app.targets_own_soloist());
         assert!(
@@ -9323,14 +9323,14 @@ mod tests {
         assert!(!app.targets_own_soloist());
         accessible_node(
             &tree,
-            "Playing on Spotifast Soloist (12345678)",
+            "Playing on Applebum Soloist (12345678)",
             Role::Button,
         );
 
         app.apply(Action::SetSoloist(false), &ctx);
         accessible_frame(&ctx, &mut app, vec![]);
         let tree = accessible_frame(&ctx, &mut app, vec![]);
-        accessible_node(&tree, "Spotifast (this computer)", Role::Button);
+        accessible_node(&tree, "Applebum (this computer)", Role::Button);
         accessible_node(&tree, "Audio output", Role::Button);
         app.backend.shutdown();
     }
@@ -9345,11 +9345,11 @@ mod tests {
         let (ctx, mut app) = accessible_app("soloist-compact-card");
         app.backend.set_offline(true);
         apply_flags(&mut app, None, Some("soloist-ready"));
-        let text = settings_text(&ctx, &mut app, "Spotify Soloist");
+        let text = settings_text(&ctx, &mut app, "Apple Music Soloist");
         assert!(text.iter().any(|s| s == "Ready on this computer."));
         assert!(text.iter().any(|s| s.starts_with("1.3.10, good until")));
         assert!(text.iter().any(|s| s == "Audio quality"));
-        assert!(text.iter().any(|s| s == "Spotify access"));
+        assert!(text.iter().any(|s| s == "Apple Music access"));
         assert!(
             !text
                 .iter()
@@ -9374,7 +9374,7 @@ mod tests {
         use clap::ValueEnum;
         for &locale in crate::i18n::Locale::value_variants() {
             for (flag, message) in [
-                ("connecting", "Connecting to Spotify…"),
+                ("connecting", "Connecting to Apple Music…"),
                 ("soloist-verifying", "Verifying Soloist…"),
             ] {
                 let (ctx, mut app) = accessible_app("loading-status-centered");
@@ -9427,7 +9427,7 @@ mod tests {
         assert!(
             texts
                 .iter()
-                .any(|(text, _)| text == "A native Spotify client.")
+                .any(|(text, _)| text == "A native Apple Music client.")
         );
         assert!(
             !tree
@@ -9498,14 +9498,14 @@ mod tests {
                 for (flag, title, instruction, waiting) in [
                     (
                         "soloist-pairing",
-                        "Choose Soloist in Spotify",
+                        "Choose Soloist in Apple Music",
                         "Open its list of devices and choose:",
-                        "Waiting for Spotify…",
+                        "Waiting for Apple Music…",
                     ),
                     (
                         "soloist-verifying",
                         "Almost there",
-                        "Soloist is connected. Spotify is confirming it's on your account.",
+                        "Soloist is connected. Apple Music is confirming it's on your account.",
                         "Verifying Soloist…",
                     ),
                 ] {
@@ -9531,7 +9531,7 @@ mod tests {
                     };
                     let title = bounds(title);
                     let instruction = bounds(instruction);
-                    let device = bounds("Spotifast Soloist (12345678)");
+                    let device = bounds("Applebum Soloist (12345678)");
                     let status = bounds(waiting);
                     let fallback = bounds("Use the built-in player");
                     assert!(title.bottom() < instruction.top());
@@ -9548,9 +9548,9 @@ mod tests {
                         );
                     }
                     for unwanted in [
-                        "Listen with Spotify Soloist",
+                        "Listen with Apple Music Soloist",
                         "Setup, privacy and limitations",
-                        "Spotify manages audio quality.",
+                        "Apple Music manages audio quality.",
                         "Start listening",
                     ] {
                         assert!(!text.iter().any(|(s, _)| s == unwanted), "{unwanted}");
@@ -9577,7 +9577,7 @@ mod tests {
         let (ctx, mut app) = accessible_app("soloist-long-device");
         app.backend.set_offline(true);
         apply_flags(&mut app, None, Some("soloist-onboarding,soloist-pairing"));
-        let name = "Spotifast Soloist on the living room computer (12345678)";
+        let name = "Applebum Soloist on the living room computer (12345678)";
         app.soloist_status = crate::soloist::Status::Pairing {
             name: name.into(),
             version: "test".into(),
@@ -9813,11 +9813,11 @@ mod tests {
                     total: 10,
                 },
                 crate::soloist::Status::Pairing {
-                    name: "Spotifast Soloist (12345678)".into(),
+                    name: "Applebum Soloist (12345678)".into(),
                     version: "1.3".into(),
                 },
                 crate::soloist::Status::Ready {
-                    name: "Spotifast Soloist (12345678)".into(),
+                    name: "Applebum Soloist (12345678)".into(),
                     version: "1.3".into(),
                     expires: crate::soloist::install::now() + 86400,
                 },

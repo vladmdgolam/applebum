@@ -31,7 +31,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 ui,
                 gettext(
                     app.locale,
-                    "Spotifast will reconnect automatically when your connection returns.",
+                    "Applebum will reconnect automatically when your connection returns.",
                 ),
                 theme::regular(14.0),
                 palette.secondary,

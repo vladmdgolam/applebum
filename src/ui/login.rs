@@ -153,7 +153,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, connecting: bool) {
                 // Translators: {version} is the app's version number, such as 1.2.0.
                 gettext(
                     app.locale,
-                    "Spotifast {version} • not affiliated with Spotify",
+                    "Applebum {version} • not affiliated with Apple Music",
                 )
                 .replace("{version}", env!("CARGO_PKG_VERSION")),
                 theme::regular(11.5),
@@ -167,22 +167,22 @@ fn problem_text(locale: crate::i18n::Locale, problem: SignInProblem) -> String {
     match problem {
         SignInProblem::MalformedClientId => gettext(
             locale,
-            "That doesn't look like a Client ID. It is 32 letters and digits, shown on Spotify's page for your registration.",
+            "That doesn't look like a Client ID. It is 32 letters and digits, shown on Apple Music's page for your registration.",
         ),
         SignInProblem::UnknownClient => gettext(
             locale,
-            "Spotify doesn't know this Client ID. Copy it again from Spotify's developer dashboard.",
+            "Apple Music doesn't know this Client ID. Copy it again from Apple Music's developer dashboard.",
         ),
         SignInProblem::AccountNotAllowed => gettext(
             locale,
-            "Spotify didn't let this account use this Client ID. Sign in with the Spotify account that registered it, which needs Premium.",
+            "Apple Music didn't let this account use this Client ID. Sign in with the Apple Music account that registered it, which needs Premium.",
         ),
         SignInProblem::SharedRetired => gettext(
             locale,
-            "Spotify no longer accepts the shared sign-in Spotifast used before. Register Spotifast to keep listening.",
+            "Apple Music no longer accepts the shared sign-in Applebum used before. Register Applebum to keep listening.",
         ),
         SignInProblem::Expired => {
-            gettext(locale, "Your Spotify sign-in expired. Please sign in again.")
+            gettext(locale, "Your Apple Music sign-in expired. Please sign in again.")
         }
     }
     .into_owned()
@@ -209,14 +209,14 @@ fn sign_in_column(app: &mut App, ui: &mut egui::Ui, connecting: bool, beside: Op
     ui.add_space(6.0);
     theme::text(
         ui,
-        "Spotifast",
+        "Applebum",
         theme::bold(if steps { 26.0 } else { 30.0 }),
         palette.text,
     );
     if !steps {
         theme::text(
             ui,
-            gettext(locale, "A native Spotify client."),
+            gettext(locale, "A native Apple Music client."),
             theme::regular(14.5),
             palette.secondary,
         );
@@ -230,7 +230,7 @@ fn sign_in_column(app: &mut App, ui: &mut egui::Ui, connecting: bool, beside: Op
                 theme::spinner(ui, 18.0, palette.accent);
                 theme::text(
                     ui,
-                    gettext(locale, "Waiting for Spotify in your browser…"),
+                    gettext(locale, "Waiting for Apple Music in your browser…"),
                     theme::medium(14.0),
                     palette.text,
                 );
@@ -254,7 +254,7 @@ fn sign_in_column(app: &mut App, ui: &mut egui::Ui, connecting: bool, beside: Op
                 // Translators: {uri} is the address to add, http://127.0.0.1:8989/login.
                 gettext(
                     locale,
-                    "If Spotify says “Invalid redirect URI”, add {uri} to your registration exactly, save, and sign in again.",
+                    "If Apple Music says “Invalid redirect URI”, add {uri} to your registration exactly, save, and sign in again.",
                 )
                 .replace("{uri}", &crate::auth::personal_redirect_uri()),
                 theme::regular(12.5),
@@ -270,7 +270,7 @@ fn sign_in_column(app: &mut App, ui: &mut egui::Ui, connecting: bool, beside: Op
                 let message = if app.soloist_waiting() && app.is_connected() {
                     app.soloist_wait_message()
                 } else {
-                    gettext(locale, "Connecting to Spotify…")
+                    gettext(locale, "Connecting to Apple Music…")
                 };
                 let gap = ui.spacing().item_spacing.x;
                 let galley = crate::bidi::layout(
@@ -307,7 +307,7 @@ fn sign_in_column(app: &mut App, ui: &mut egui::Ui, connecting: bool, beside: Op
                 .is_some_and(crate::auth::looks_like_client_id);
             if ui
                 .add_enabled_ui(ready, |ui| {
-                    big_button(ui, app, &gettext(locale, "Sign in with Spotify"))
+                    big_button(ui, app, &gettext(locale, "Sign in with Apple Music"))
                 })
                 .inner
             {
@@ -318,7 +318,7 @@ fn sign_in_column(app: &mut App, ui: &mut egui::Ui, connecting: bool, beside: Op
                 ui,
                 gettext(
                     locale,
-                    "Sign in through your browser. Spotifast never sees your password. Local playback needs Spotify Premium.",
+                    "Sign in through your browser. Applebum never sees your password. Local playback needs Apple Music Premium.",
                 ),
                 theme::regular(12.5),
                 palette.secondary,
@@ -327,7 +327,7 @@ fn sign_in_column(app: &mut App, ui: &mut egui::Ui, connecting: bool, beside: Op
                 ui.add_space(4.0);
                 if theme::link(
                     ui,
-                    gettext(locale, "How to register Spotifast"),
+                    gettext(locale, "How to register Applebum"),
                     theme::regular(13.0),
                     palette.secondary,
                 )
@@ -401,7 +401,7 @@ fn client_id_field(app: &mut App, ui: &mut egui::Ui) {
             ui,
             gettext(
                 locale,
-                "A Client ID is 32 letters and digits. Copy it from Spotify's developer dashboard.",
+                "A Client ID is 32 letters and digits. Copy it from Apple Music's developer dashboard.",
             ),
             theme::regular(12.0),
             palette.danger,
@@ -453,7 +453,7 @@ fn setup_steps(app: &mut App, ui: &mut egui::Ui, width: f32) {
     ui.add_space(4.0);
     theme::text(
         ui,
-        gettext(locale, "Register Spotifast"),
+        gettext(locale, "Register Applebum"),
         theme::bold(18.0),
         palette.text,
     );
@@ -461,7 +461,7 @@ fn setup_steps(app: &mut App, ui: &mut egui::Ui, width: f32) {
         ui,
         gettext(
             locale,
-            "Spotify asks you to register Spotifast once, on an account with Premium. It takes about two minutes and gives you a Client ID.",
+            "Apple Music asks you to register Applebum once, on an account with Premium. It takes about two minutes and gives you a Client ID.",
         ),
         theme::regular(13.0),
         palette.secondary,
@@ -471,7 +471,7 @@ fn setup_steps(app: &mut App, ui: &mut egui::Ui, width: f32) {
         ui,
         &palette,
         1,
-        &gettext(locale, "Open Spotify's developer dashboard."),
+        &gettext(locale, "Open Apple Music's developer dashboard."),
         |ui| {
             if theme::link(
                 ui,
@@ -492,7 +492,7 @@ fn setup_steps(app: &mut App, ui: &mut egui::Ui, width: f32) {
         2,
         &gettext(
             locale,
-            "Click Create app, Spotify's name for this registration. Any name will do.",
+            "Click Create app, Apple Music's name for this registration. Any name will do.",
         ),
         |_| {},
     );
@@ -754,7 +754,7 @@ mod tests {
             bounds.y0 >= 0.0 && bounds.y1 <= 480.0
         };
         let first = frame(vec![]);
-        assert!(visible_button(&first, "Sign in with Spotify"));
+        assert!(visible_button(&first, "Sign in with Apple Music"));
         let center = |label: &str| {
             let bounds = first
                 .nodes
@@ -767,7 +767,7 @@ mod tests {
             (bounds.x0 + bounds.x1) / 2.0
         };
         assert!(
-            (center("Proxy Settings") - center("Sign in with Spotify")).abs() < 1.0,
+            (center("Proxy Settings") - center("Sign in with Apple Music")).abs() < 1.0,
             "the proxy link stays centered under sign-in"
         );
         frame(vec![

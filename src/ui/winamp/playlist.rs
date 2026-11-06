@@ -644,7 +644,7 @@ fn menus(app: &mut App, view: &mut View, rows: &[Row], queue_uris: &[String], he
 fn add_menu(app: &mut App, ui: &mut egui::Ui) {
     let locale = app.locale;
     if ui
-        .button(gettext(locale, "Search Spotify").as_ref())
+        .button(gettext(locale, "Search Apple Music").as_ref())
         .clicked()
     {
         app.actions.push(Action::FocusSearch);

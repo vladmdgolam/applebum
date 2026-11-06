@@ -406,15 +406,15 @@ fn slow_banner(app: &mut App, ui: &mut egui::Ui) {
     banner(
         app,
         ui,
-        &gettext(locale, "Spotify is being slow on the shared sign-in."),
+        &gettext(locale, "Apple Music is being slow on the shared sign-in."),
         &gettext(
             locale,
-            "Spotifast no longer offers the shared sign-in, and Spotify can stop accepting it at any time. Register Spotifast and you won't have to wait.",
+            "Applebum no longer offers the shared sign-in, and Apple Music can stop accepting it at any time. Register Applebum and you won't have to wait.",
         ),
         false,
         vec![
             (
-                gettext(locale, "Register Spotifast"),
+                gettext(locale, "Register Applebum"),
                 Action::OpenPersonalAppSetup,
             ),
             (
@@ -439,11 +439,11 @@ fn audio_key_banner(app: &mut App, ui: &mut egui::Ui) {
         ui,
         &gettext(
             locale,
-            "Spotify won't let this computer play this song right now.",
+            "Apple Music won't let this computer play this song right now.",
         ),
         &gettext(
             locale,
-            "Spotify refused the key that unlocks the audio. Spotifast can't fix that, but it sometimes clears up on its own. You can still play on your phone or another Spotify device.",
+            "Apple Music refused the key that unlocks the audio. Applebum can't fix that, but it sometimes clears up on its own. You can still play on your phone or another Apple Music device.",
         ),
         false,
         vec![

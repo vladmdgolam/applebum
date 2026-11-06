@@ -41,8 +41,8 @@ const PICTURE_WAIT: Duration = Duration::from_millis(1500);
 fn deck() -> Deck {
     let song = |title: &str| Song {
         title: title.to_owned(),
-        artist: "Spotifast".to_owned(),
-        album: "Spotifast".to_owned(),
+        artist: "Applebum".to_owned(),
+        album: "Applebum".to_owned(),
         uri: format!("spotify:track:{title}"),
         duration_s: 214.0,
     };

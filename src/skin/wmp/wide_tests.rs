@@ -20,7 +20,7 @@ const SQUARE: (f32, f32) = (72.0, 96.0);
 fn start_with(deck: &Deck, prefs: HashMap<String, String>) -> (Runtime, u32, Instant) {
     let skin = Skin::wide().expect("the skin reads");
     let wmp = skin.wmp.clone().expect("a Windows Media Player skin");
-    assert_eq!(wmp.title, "Spotifast Wide");
+    assert_eq!(wmp.title, "Applebum Wide");
     assert_eq!((wmp.width, wmp.height), (460, 180));
     let runtime = Runtime::new(
         crate::skin::WIDE.into(),
@@ -295,6 +295,6 @@ fn the_window_buttons_work() {
 
 #[test]
 fn it_is_listed_right_after_the_tall_one() {
-    assert_eq!(crate::skin::SHIPPED, ["Spotifast Tall", "Spotifast Wide"]);
+    assert_eq!(crate::skin::SHIPPED, ["Applebum Tall", "Applebum Wide"]);
     assert!(crate::skin::preview::of_skin(&Skin::wide().expect("reads")).is_some());
 }

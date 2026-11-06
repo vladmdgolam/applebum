@@ -136,7 +136,7 @@ fn apply_blocking_proxy(
 }
 
 fn user_agent() -> &'static str {
-    concat!("Spotifast/", env!("CARGO_PKG_VERSION"))
+    concat!("Applebum/", env!("CARGO_PKG_VERSION"))
 }
 
 #[cfg(test)]

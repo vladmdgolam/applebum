@@ -38,7 +38,7 @@ pub(super) fn deck(state: PlayState) -> Deck {
 fn start(deck: &Deck) -> (Runtime, u32, Instant) {
     let skin = Skin::ribbon().expect("the skin reads");
     let wmp = skin.wmp.clone().expect("a Windows Media Player skin");
-    assert_eq!(wmp.title, "Spotifast Tall");
+    assert_eq!(wmp.title, "Applebum Tall");
     let runtime = Runtime::new(
         crate::skin::RIBBON.into(),
         wmp,

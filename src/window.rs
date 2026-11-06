@@ -28,7 +28,7 @@ pub fn no_window_dialog(
     use crate::i18n::gettext;
     let english = fastframe_graphics::Dialog::english(trouble);
     fastframe_graphics::Dialog {
-        title: gettext(locale, "Spotifast cannot open its window").into_owned(),
+        title: gettext(locale, "Applebum cannot open its window").into_owned(),
         body: no_window_body(locale, trouble.cause, trouble.help_url)
             .unwrap_or_else(|| english.body.clone()),
         open_label: gettext(locale, "Open page").into_owned(),
@@ -48,14 +48,14 @@ fn no_window_body(
     Some(match cause {
         fastframe_graphics::Cause::WindowsOnArm => gettext(
             locale,
-            "On Windows on ARM, the OpenGL that Spotifast draws with comes from Microsoft's OpenCL, OpenGL & Vulkan Compatibility Pack. Open its Microsoft Store page to install or repair it?",
+            "On Windows on ARM, the OpenGL that Applebum draws with comes from Microsoft's OpenCL, OpenGL & Vulkan Compatibility Pack. Open its Microsoft Store page to install or repair it?",
         )
         .into_owned(),
         fastframe_graphics::Cause::NoGraphicsDriver => gettext(
             locale,
             // Translators: Keep {url} exactly as written. It becomes the address
             // of the Spotifast download page.
-            "Spotifast needs a graphics driver with OpenGL 2.0 or newer, and this PC or virtual machine does not provide one. Install the graphics driver, or turn on GPU acceleration for the virtual machine. Open {url} to read more?",
+            "Applebum needs a graphics driver with OpenGL 2.0 or newer, and this PC or virtual machine does not provide one. Install the graphics driver, or turn on GPU acceleration for the virtual machine. Open {url} to read more?",
         )
         .replace("{url}", help_url.unwrap_or(DOWNLOAD_PAGE)),
         _ => return None,
@@ -219,7 +219,7 @@ mod tests {
         let arm = no_window_dialog(
             english,
             &Trouble::new(
-                "Spotifast",
+                "Applebum",
                 Cause::WindowsOnArm,
                 details,
                 Some(DOWNLOAD_PAGE),
@@ -235,13 +235,13 @@ mod tests {
         let x64 = no_window_dialog(
             english,
             &Trouble::new(
-                "Spotifast",
+                "Applebum",
                 Cause::NoGraphicsDriver,
                 details,
                 Some(DOWNLOAD_PAGE),
             ),
         );
-        assert_eq!(x64.title, "Spotifast cannot open its window");
+        assert_eq!(x64.title, "Applebum cannot open its window");
         assert_eq!(x64.link.as_deref(), Some(DOWNLOAD_PAGE));
         assert!(x64.body.contains("OpenGL 2.0"));
         assert!(x64.body.contains("virtual machine"));

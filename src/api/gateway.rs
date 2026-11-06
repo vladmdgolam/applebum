@@ -234,7 +234,7 @@ impl ApiGateway {
         {
             return Err(ApiError::Status {
                 status: 403,
-                message: "The Spotify grants belong to different accounts".into(),
+                message: "The Apple Music grants belong to different accounts".into(),
             });
         }
         self.session(source)
@@ -403,7 +403,7 @@ impl ApiGateway {
                 }
             }
         }
-        log::debug!("Spotify route operation={operation:?} source={source}");
+        log::debug!("Apple Music route operation={operation:?} source={source}");
         Ok(self.session(source).client())
     }
 

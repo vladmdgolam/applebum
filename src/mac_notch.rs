@@ -390,7 +390,7 @@ fn update_repeat_button_ui(
 define_class!(
     #[unsafe(super(NSObject))]
     #[thread_kind = MainThreadOnly]
-    #[name = "SpotifastNotchActionHandler"]
+    #[name = "ApplebumNotchActionHandler"]
     pub struct SpotifastNotchActionHandler;
 
     impl SpotifastNotchActionHandler {
@@ -469,7 +469,7 @@ define_class!(
 define_class!(
     #[unsafe(super(NSView))]
     #[thread_kind = MainThreadOnly]
-    #[name = "SpotifastNotchView"]
+    #[name = "ApplebumNotchView"]
     pub struct SpotifastNotchView;
 
     impl SpotifastNotchView {
@@ -498,7 +498,7 @@ define_class!(
 define_class!(
     #[unsafe(super(NSView))]
     #[thread_kind = MainThreadOnly]
-    #[name = "SpotifastCardView"]
+    #[name = "ApplebumCardView"]
     pub struct SpotifastCardView;
 
     impl SpotifastCardView {
@@ -517,7 +517,7 @@ define_class!(
 define_class!(
     #[unsafe(super(NSView))]
     #[thread_kind = MainThreadOnly]
-    #[name = "SpotifastCanvasView"]
+    #[name = "ApplebumCanvasView"]
     pub struct SpotifastCanvasView;
 
     impl SpotifastCanvasView {
@@ -1574,7 +1574,7 @@ pub fn sync_state(enabled: bool, is_background: bool, track: Option<&NotchTrackI
 
         if let Some(t) = track {
             let title = if t.title.trim().is_empty() {
-                "Spotifast"
+                "Applebum"
             } else {
                 &t.title
             };
@@ -1603,7 +1603,7 @@ pub fn sync_state(enabled: bool, is_background: bool, track: Option<&NotchTrackI
             update_artwork_path(ctrl, t.art_path.clone());
         } else {
             ctrl.title_field
-                .setStringValue(&NSString::from_str("Spotifast"));
+                .setStringValue(&NSString::from_str("Applebum"));
             ctrl.artist_field
                 .setStringValue(&NSString::from_str("Nothing playing"));
             update_time_labels(

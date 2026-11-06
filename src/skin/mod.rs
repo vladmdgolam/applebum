@@ -33,7 +33,7 @@ pub enum SkinError {
     NotAnArchive,
     #[error("{0}")]
     Archive(zip::ZipError),
-    #[error("this is a modern Winamp skin, which Spotifast cannot draw; it needs a classic one")]
+    #[error("this is a modern Winamp skin, which Applebum cannot draw; it needs a classic one")]
     ModernSkin,
     #[error("no skin bitmaps were found inside")]
     Empty,
@@ -443,9 +443,9 @@ fn wanted(file_name: &str) -> bool {
 /// The built-in skin, drawn by `examples/default_skin.rs`.
 /// The name the settings hold for [`Skin::ribbon`], which is no file in the
 /// skins folder.
-pub const RIBBON: &str = "Spotifast Tall";
+pub const RIBBON: &str = "Applebum Tall";
 /// The same, for [`Skin::wide`].
-pub const WIDE: &str = "Spotifast Wide";
+pub const WIDE: &str = "Applebum Wide";
 /// The skins the app ships, in the order they are listed.
 pub const SHIPPED: [&str; 2] = [RIBBON, WIDE];
 
@@ -455,7 +455,7 @@ const RIBBON_ARCHIVE: &[u8] = include_bytes!("../../assets/skins/spotifast-ribbo
 const WIDE_ARCHIVE: &[u8] = include_bytes!("../../assets/skins/spotifast-wide.wmz");
 
 static BUILTIN: LazyLock<Arc<Skin>> = LazyLock::new(|| {
-    Arc::new(Skin::from_archive("Spotifast", BUILTIN_ARCHIVE).expect("the built-in skin reads"))
+    Arc::new(Skin::from_archive("Applebum", BUILTIN_ARCHIVE).expect("the built-in skin reads"))
 });
 
 #[cfg(test)]
@@ -502,7 +502,7 @@ mod tests {
             );
         }
         assert!(skin.has_extended_digits());
-        assert_eq!(skin.name, "Spotifast");
+        assert_eq!(skin.name, "Applebum");
     }
 
     #[test]

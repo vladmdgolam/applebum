@@ -139,7 +139,7 @@ mod mac_impl {
     define_class!(
         #[unsafe(super(NSObject))]
         #[thread_kind = MainThreadOnly]
-        #[name = "SpotifastMenuHandler"]
+        #[name = "ApplebumMenuHandler"]
         pub struct SpotifastMenuHandler;
 
         impl SpotifastMenuHandler {
@@ -704,7 +704,7 @@ mod mac_impl {
         ));
         help_menu.addItem(&create_item(
             mtm,
-            ns_string!("Spotifast on GitHub"),
+            ns_string!("Applebum on GitHub"),
             Some(sel!(openRepo:)),
             ns_string!(""),
             None,

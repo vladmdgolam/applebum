@@ -526,7 +526,7 @@ mod tests {
         let original = view.items.clone();
         songs.start_refresh(2);
         songs.absorb(0, page(0, 50, 100), 20_000);
-        songs.fail("Spotify is unavailable".into());
+        songs.fail("Apple Music is unavailable".into());
         songs.sync_view(&mut view);
         assert_eq!(view.items, original);
         assert!(view.error.is_some());

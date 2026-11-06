@@ -16,7 +16,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     };
     let palette = app.palette;
     let locale = app.locale;
-    let title = gettext(locale, "Update Spotifast");
+    let title = gettext(locale, "Update Applebum");
     let mut close = ctx.input(|input| input.key_pressed(egui::Key::Escape));
     let frame = Frame::new()
         .fill(palette.overlay)
@@ -112,7 +112,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                         egui::Label::new(
                             RichText::new(gettext(
                                 locale,
-                                "Music playing on this computer will stop when Spotifast restarts.",
+                                "Music playing on this computer will stop when Applebum restarts.",
                             ))
                             .font(theme::regular(14.0))
                             .color(palette.secondary),

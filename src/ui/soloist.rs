@@ -309,18 +309,18 @@ fn welcome(app: &mut App, ui: &mut egui::Ui) {
     heading(
         ui,
         &palette,
-        &gettext(locale, "Listen with Spotify Soloist"),
+        &gettext(locale, "Listen with Apple Music Soloist"),
         &gettext(
             locale,
-            "Spotify's own player, running on this computer. Spotifast sets it up and keeps it updated.",
+            "Apple Music's own player, running on this computer. Applebum sets it up and keeps it updated.",
         ),
     );
     ui.add_space(20.0);
     left_aligned(ui, |ui| {
         for (number, text) in [
-            gettext(locale, "Get your personal key from Spotify."),
-            gettext(locale, "Spotifast downloads the player."),
-            gettext(locale, "Choose it once in the Spotify app."),
+            gettext(locale, "Get your personal key from Apple Music."),
+            gettext(locale, "Applebum downloads the player."),
+            gettext(locale, "Choose it once in the Apple Music app."),
         ]
         .iter()
         .enumerate()
@@ -335,7 +335,7 @@ fn welcome(app: &mut App, ui: &mut egui::Ui) {
     ui.add_space(12.0);
     theme::text(
         ui,
-        gettext(locale, "Requires Spotify Premium."),
+        gettext(locale, "Requires Apple Music Premium."),
         theme::regular(12.5),
         palette.secondary,
     );
@@ -365,7 +365,7 @@ fn key(app: &mut App, ui: &mut egui::Ui, failure: Option<Failure>) {
         &gettext(locale, "Get your Soloist key"),
         &gettext(
             locale,
-            "Spotify gives each Premium account its own key. Spotifast keeps it in your system's credential store.",
+            "Apple Music gives each Premium account its own key. Applebum keeps it in your system's credential store.",
         ),
     );
     ui.add_space(20.0);
@@ -381,7 +381,7 @@ fn key(app: &mut App, ui: &mut egui::Ui, failure: Option<Failure>) {
             ui,
             &palette,
             1,
-            &gettext(locale, "Copy your key from Spotify's Soloist page."),
+            &gettext(locale, "Copy your key from Apple Music's Soloist page."),
             |ui| {
                 if theme::link(
                     ui,
@@ -458,7 +458,7 @@ fn starting(app: &mut App, ui: &mut egui::Ui) {
         ui,
         &palette,
         &gettext(locale, "Starting Soloist"),
-        &gettext(locale, "Checking your key and starting Spotify's player."),
+        &gettext(locale, "Checking your key and starting Apple Music's player."),
     );
     ui.add_space(24.0);
     theme::spinner(ui, 22.0, palette.accent);
@@ -469,7 +469,7 @@ fn starting(app: &mut App, ui: &mut egui::Ui) {
             &palette,
             &gettext(
                 locale,
-                "This is taking longer than usual. Spotify may be busy, so it's safe to wait.",
+                "This is taking longer than usual. Apple Music may be busy, so it's safe to wait.",
             ),
         );
         ui.add_space(12.0);
@@ -486,7 +486,7 @@ fn downloading(app: &mut App, ui: &mut egui::Ui, received: u64, total: u64) {
         ui,
         &palette,
         &gettext(locale, "Downloading Soloist"),
-        &gettext(locale, "Directly from Spotify, to this computer."),
+        &gettext(locale, "Directly from Apple Music, to this computer."),
     );
     ui.add_space(24.0);
     let fraction = (total > 0).then(|| (received as f32 / total as f32).clamp(0.0, 1.0));
@@ -542,7 +542,7 @@ fn pairing(app: &mut App, ui: &mut egui::Ui, name: &str) {
     heading(
         ui,
         &palette,
-        &gettext(locale, "Choose Soloist in Spotify"),
+        &gettext(locale, "Choose Soloist in Apple Music"),
         &gettext(locale, "You only do this once, on the same network."),
     );
     ui.add_space(20.0);
@@ -551,7 +551,7 @@ fn pairing(app: &mut App, ui: &mut egui::Ui, name: &str) {
             ui,
             &palette,
             1,
-            &gettext(locale, "Open the Spotify desktop app, on the same account."),
+            &gettext(locale, "Open the Apple Music desktop app, on the same account."),
             |_| {},
         );
         super::login::step(
@@ -573,7 +573,7 @@ fn pairing(app: &mut App, ui: &mut egui::Ui, name: &str) {
         );
     });
     ui.add_space(14.0);
-    activity(ui, &palette, &gettext(locale, "Waiting for Spotify…"));
+    activity(ui, &palette, &gettext(locale, "Waiting for Apple Music…"));
     ui.add_space(12.0);
     let help_id = egui::Id::new(HELP_OPEN);
     let open = ui
@@ -643,7 +643,7 @@ fn verifying(app: &mut App, ui: &mut egui::Ui, name: &str) {
         &gettext(locale, "Almost there"),
         &gettext(
             locale,
-            "Soloist is connected. Spotify is confirming it's on your account.",
+            "Soloist is connected. Apple Music is confirming it's on your account.",
         ),
     );
     ui.add_space(20.0);
@@ -657,7 +657,7 @@ fn verifying(app: &mut App, ui: &mut egui::Ui, name: &str) {
             &palette,
             &gettext(
                 locale,
-                "Spotify is slow to answer. Playing a song on Soloist from the Spotify app can help.",
+                "Apple Music is slow to answer. Playing a song on Soloist from the Apple Music app can help.",
             ),
         );
     }
@@ -719,7 +719,7 @@ pub fn banner(app: &mut App, ui: &mut egui::Ui) {
         gettext(locale, "Use the built-in player"),
         Action::UseBuiltInPlayer,
     );
-    let connect = gettext(locale, "Connect in Spotify");
+    let connect = gettext(locale, "Connect in Apple Music");
     let reconnecting = gettext(locale, "Reconnecting Soloist…");
     let browsing = gettext(
         locale,
@@ -741,7 +741,7 @@ pub fn banner(app: &mut App, ui: &mut egui::Ui) {
         ),
         Status::NeedsKey => (
             gettext(locale, "Soloist needs your key"),
-            gettext(locale, "Spotifast can't find the key you saved."),
+            gettext(locale, "Applebum can't find the key you saved."),
             false,
             vec![
                 (gettext(locale, "Add your key"), Action::StartSoloistSetup),
@@ -750,7 +750,7 @@ pub fn banner(app: &mut App, ui: &mut egui::Ui) {
         ),
         Status::Downloading { received, total } => {
             let percent = (*received * 100).checked_div(*total).unwrap_or(0);
-            let source = gettext(locale, "Directly from Spotify, to this computer.");
+            let source = gettext(locale, "Directly from Apple Music, to this computer.");
             (
                 gettext(locale, "Downloading Soloist"),
                 format!("{source} {percent}%").into(),
@@ -762,16 +762,16 @@ pub fn banner(app: &mut App, ui: &mut egui::Ui) {
             gettext(locale, "Soloist needs to connect again"),
             gettext(
                 locale,
-                "Spotify signed it out on this computer. Choose it once more in Spotify.",
+                "Apple Music signed it out on this computer. Choose it once more in Apple Music.",
             ),
             false,
             vec![(connect, Action::StartSoloistSetup), built_in],
         ),
         Status::Ready { .. } if !app.soloist_recovering() => (
-            gettext(locale, "Spotify hasn't listed Soloist yet"),
+            gettext(locale, "Apple Music hasn't listed Soloist yet"),
             gettext(
                 locale,
-                "Soloist is running. Playing a song on it from the Spotify app usually helps.",
+                "Soloist is running. Playing a song on it from the Apple Music app usually helps.",
             ),
             false,
             vec![(connect, Action::StartSoloistSetup), built_in],
@@ -795,11 +795,11 @@ pub(super) fn rows(app: &App) -> [RowText<'static>; 6] {
     let supported = crate::soloist::install::supported();
     [
         RowText::new(
-            gettext(locale, "Listen with Spotify Soloist"),
+            gettext(locale, "Listen with Apple Music Soloist"),
             if supported {
                 gettext(
                     locale,
-                    "Spotify's own player, running on this computer. Requires Premium.",
+                    "Apple Music's own player, running on this computer. Requires Premium.",
                 )
             } else {
                 Failure::Unsupported.message(locale)
@@ -818,15 +818,15 @@ pub(super) fn rows(app: &App) -> [RowText<'static>; 6] {
             gettext(locale, "Audio quality"),
             gettext(
                 locale,
-                "Spotify manages it. Soloist doesn't report the format it plays.",
+                "Apple Music manages it. Soloist doesn't report the format it plays.",
             ),
         )
         .when(enabled),
         RowText::new(
-            gettext(locale, "Spotify access"),
+            gettext(locale, "Apple Music access"),
             gettext(
                 locale,
-                "Made for you, listening activity and Spotify lyrics.",
+                "Made for you, listening activity and Apple Music lyrics.",
             ),
         )
         .when(enabled),
@@ -854,8 +854,8 @@ fn status_text(app: &App) -> Cow<'static, str> {
             let percent = (*received * 100).checked_div(*total).unwrap_or(0);
             format!("{downloading} {percent}%").into()
         }
-        Status::Pairing { .. } => gettext(locale, "Waiting for Spotify…"),
-        Status::NeedsKey => gettext(locale, "Spotifast can't find the key you saved."),
+        Status::Pairing { .. } => gettext(locale, "Waiting for Apple Music…"),
+        Status::NeedsKey => gettext(locale, "Applebum can't find the key you saved."),
         Status::Failed(failure) => failure.message(locale),
     }
 }
@@ -954,7 +954,7 @@ fn status_control(app: &mut App, ui: &mut egui::Ui) {
         }
         Status::NeedsKey => Some((gettext(locale, "Add your key"), Action::StartSoloistSetup)),
         Status::Pairing { .. } if !app.soloist_recovering() => Some((
-            gettext(locale, "Connect in Spotify"),
+            gettext(locale, "Connect in Apple Music"),
             Action::StartSoloistSetup,
         )),
         _ => None,

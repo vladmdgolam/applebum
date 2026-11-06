@@ -112,7 +112,7 @@ pub fn contains_response(bytes: &[u8]) -> anyhow::Result<bool> {
     }
     ensure!(
         found.len() == 1,
-        "Spotify did not confirm this prerelease's saved state"
+        "Apple Music did not confirm this prerelease's saved state"
     );
     Ok(found[0])
 }
@@ -159,7 +159,7 @@ impl Prerelease {
         ensure!(
             body.get("errors")
                 .is_none_or(|errors| errors.as_array().is_some_and(Vec::is_empty)),
-            "Spotify could not return this track list"
+            "Apple Music could not return this track list"
         );
         let album = body
             .pointer("/data/albumUnion")

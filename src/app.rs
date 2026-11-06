@@ -929,7 +929,7 @@ const RECENTS_PAGE: u32 = 50;
 /// Who the desktop's media controls belong to. Links to Spotify, as
 /// `spotify:` URIs or web addresses, are what they may ask Spotifast to open.
 fn media_app() -> fastframe_now_playing::App {
-    let mut app = fastframe_now_playing::App::new("spotifast", "Spotifast");
+    let mut app = fastframe_now_playing::App::new("spotifast", "Applebum");
     app.uri_schemes = vec!["spotify".into(), "https".into(), "http".into()];
     app
 }
@@ -991,7 +991,7 @@ impl fastframe_shell::Resident for App {
     /// window opens instead.
     fn start_hidden(&mut self) -> bool {
         if self.tray.is_none() || !self.settings.keep_playing_in_background {
-            log::info!("starting with the window: nothing would keep Spotifast in the tray");
+            log::info!("starting with the window: nothing would keep Applebum in the tray");
             return false;
         }
         self.begin_hidden_start(Instant::now());
@@ -1073,12 +1073,12 @@ fn tray_config() -> fastframe_tray::Config {
     use fastframe_tray::MenuItem;
     fastframe_tray::Config {
         id: "spotifast",
-        title: "Spotifast".into(),
+        title: "Applebum".into(),
         icon: util::app_icon_rgba,
         template_icon: Some(util::tray_template_rgba),
         themed_icon: true,
         menu: vec![
-            MenuItem::action(TRAY_SHOW, "Show or hide Spotifast"),
+            MenuItem::action(TRAY_SHOW, "Show or hide Applebum"),
             MenuItem::action(TRAY_MAIN_WINDOW, "Open main window"),
             MenuItem::Separator,
             MenuItem::action(TRAY_PLAY_PAUSE, play_pause_label(false)),
@@ -1728,10 +1728,10 @@ impl App {
                 }
             }
             Err(error) => {
-                log::warn!("couldn't change how Spotifast starts at login: {error}");
+                log::warn!("couldn't change how Applebum starts at login: {error}");
                 self.toast_error(gettext(
                     self.locale,
-                    "Couldn't change how Spotifast starts with your computer.",
+                    "Couldn't change how Applebum starts with your computer.",
                 ));
                 // Show what the system really has.
                 self.autostart_wanted = None;
@@ -2023,10 +2023,10 @@ impl App {
         use crate::soloist::Status;
         match self.soloist_status {
             Status::Starting | Status::Off => gettext(self.locale, "Starting Soloist…"),
-            Status::Downloading { .. } => gettext(self.locale, "Downloading Soloist from Spotify…"),
+            Status::Downloading { .. } => gettext(self.locale, "Downloading Soloist from Apple Music…"),
             Status::Ready { .. } => gettext(self.locale, "Verifying Soloist…"),
             Status::Pairing { .. } | Status::NeedsKey | Status::Failed(_) => {
-                gettext(self.locale, "Connecting to Spotify…")
+                gettext(self.locale, "Connecting to Apple Music…")
             }
         }
     }
@@ -3158,7 +3158,7 @@ impl App {
                             if manual || self.update.as_ref() != Some(&notice) {
                                 self.toast(
                                     // Translators: {version} is a version number such as 1.4.0.
-                                    gettext(self.locale, "Spotifast {version} is available")
+                                    gettext(self.locale, "Applebum {version} is available")
                                         .replace("{version}", &notice.version.to_string()),
                                 );
                             }
@@ -3175,7 +3175,7 @@ impl App {
                         Ok(None) => {
                             self.update = None;
                             if manual {
-                                self.toast(gettext(self.locale, "Spotifast is up to date"));
+                                self.toast(gettext(self.locale, "Applebum is up to date"));
                             } else {
                                 log::debug!("this is the newest release");
                             }
@@ -3505,7 +3505,7 @@ impl App {
                 self.toast_error(
                     // Translators: {error} is an error message from the playback engine.
                     if self.settings.soloist_enabled {
-                        gettext(self.locale, "Spotify connection: {error}")
+                        gettext(self.locale, "Apple Music connection: {error}")
                     } else {
                         gettext(self.locale, "Local playback: {error}")
                     }
@@ -3515,7 +3515,7 @@ impl App {
             LocalPlayback::Authorizing => {
                 if !matches!(self.local_playback, LocalPlayback::Authorizing) {
                     self.toast(if self.settings.soloist_enabled {
-                        gettext(self.locale, "Opening your browser to connect Spotify")
+                        gettext(self.locale, "Opening your browser to connect Apple Music")
                     } else {
                         gettext(self.locale, "Opening your browser to set up local playback")
                     });
@@ -3910,7 +3910,7 @@ impl App {
                     self.backend.send(Command::Reconnect);
                     self.toast(gettext(
                         self.locale,
-                        "Spotify audio disconnected. Reconnecting local playback",
+                        "Apple Music audio disconnected. Reconnecting local playback",
                     ));
                 }
             }
@@ -3921,7 +3921,7 @@ impl App {
             &self.local,
             &state,
         ) {
-            log::info!("the list ended; playing what Spotify follows {seed} with");
+            log::info!("the list ended; playing what Apple Music follows {seed} with");
             self.local_list = None;
             self.backend.player(PlayerCommand::Load(LoadSpec {
                 context_uri: Some(seed),
@@ -7024,7 +7024,7 @@ impl App {
             page.items.fail(
                 gettext(
                     locale,
-                    "Spotify hasn't confirmed your playlist changes yet. Try refreshing again.",
+                    "Apple Music hasn't confirmed your playlist changes yet. Try refreshing again.",
                 )
                 .into_owned(),
             );
@@ -8166,7 +8166,7 @@ impl App {
                         self.auth = AuthStatus::Failed(
                             gettext(
                                 self.locale,
-                                "Your Spotify sign-in expired. Please sign in again.",
+                                "Your Apple Music sign-in expired. Please sign in again.",
                             )
                             .into_owned(),
                         );
@@ -9446,7 +9446,7 @@ impl App {
                         gettext(
                             self.locale,
                             // Translators: {query} is the words someone searched for.
-                            "Nothing on Spotify matches \u{201c}{query}\u{201d}",
+                            "Nothing on Apple Music matches \u{201c}{query}\u{201d}",
                         )
                         .replace("{query}", &query),
                     ),
@@ -9744,7 +9744,7 @@ impl App {
                     Some(show) => self.open(Page::Show(show.id)),
                     None => self.toast_error(gettext(
                         self.locale,
-                        "This episode's podcast is not on Spotify",
+                        "This episode's podcast is not on Apple Music",
                     )),
                 },
                 Err(error) => self.toast_error(
@@ -10004,7 +10004,7 @@ impl App {
                         }
                         None => self.toast_error(gettext(
                             self.locale,
-                            "This song's album is not on Spotify",
+                            "This song's album is not on Apple Music",
                         )),
                     }
                 } else if self.track_requests.insert(id.clone()) {
@@ -10021,7 +10021,7 @@ impl App {
                 self.pending_link = None;
                 self.toast_error(gettext(
                     self.locale,
-                    "Spotifast cannot open this kind of Spotify link",
+                    "Applebum cannot open this kind of Apple Music link",
                 ));
             }
         }
@@ -12230,7 +12230,7 @@ impl App {
         if uris.is_empty() {
             self.toast(gettext(
                 self.locale,
-                "The clipboard has no Spotify song links",
+                "The clipboard has no Apple Music song links",
             ));
             return;
         }
@@ -13069,7 +13069,7 @@ impl App {
                 if changes.kept_description {
                     self.toast_error(gettext(
                         self.locale,
-                        "Spotify doesn't let apps remove a playlist description, so it was kept",
+                        "Apple Music doesn't let apps remove a playlist description, so it was kept",
                     ));
                 }
                 if changes.name.is_some()
@@ -13456,7 +13456,7 @@ impl App {
                     {
                         self.toast(gettext(
                             self.locale,
-                            "Spotify doesn't let apps reorder your playlists, so this order is saved on this computer",
+                            "Apple Music doesn't let apps reorder your playlists, so this order is saved on this computer",
                         ));
                     }
                     self.settings.sidebar_order = order;
@@ -13663,7 +13663,7 @@ impl App {
                     .and_then(|user| user.product.as_deref())
                     .is_some_and(|product| product != "premium");
                 if free {
-                    self.toast_error(gettext(self.locale, "Local playback needs Spotify Premium"));
+                    self.toast_error(gettext(self.locale, "Local playback needs Apple Music Premium"));
                 } else if !self.local_ready
                     && !matches!(
                         self.local_playback,
@@ -14495,7 +14495,7 @@ impl App {
         }
         if crate::power::playback_needs_activity(&self.local) {
             self.playback_activity
-                .get_or_insert_with(|| crate::power::Activity::begin("Spotify playback"));
+                .get_or_insert_with(|| crate::power::Activity::begin("Apple Music playback"));
             let power = &self.power;
             self.keep_awake
                 .get_or_insert_with(|| power.keep_awake("Playing music"));
@@ -14690,9 +14690,9 @@ impl App {
     /// Keeps the current track in the window and taskbar title (#94).
     fn sync_window_title(&mut self, ctx: &egui::Context) {
         let title = match self.now_playing().filter(|now| now.playing) {
-            Some(now) if now.subtitle.is_empty() => format!("{} - Spotifast", now.title),
+            Some(now) if now.subtitle.is_empty() => format!("{} - Applebum", now.title),
             Some(now) => format!("{} - {}", now.subtitle, now.title),
-            None => "Spotifast".to_string(),
+            None => "Applebum".to_string(),
         };
         if title != self.window_title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
@@ -15294,7 +15294,7 @@ fn engine_error_text(locale: Locale, error: &str) -> String {
     if error == crate::player::AUDIO_KEY_REFUSED {
         return gettext(
             locale,
-            "Spotify won't let this computer play this song right now.",
+            "Apple Music won't let this computer play this song right now.",
         )
         .into_owned();
     }
@@ -15315,7 +15315,7 @@ fn friendly_page_error(locale: Locale, error: &crate::api::ApiError) -> String {
     match error.status() {
         Some(403) | Some(404) => gettext(
             locale,
-            "Spotify doesn't make this playlist's songs available to third-party apps.",
+            "Apple Music doesn't make this playlist's songs available to third-party apps.",
         )
         .into_owned(),
         _ => error.to_string(),
@@ -15446,16 +15446,16 @@ fn cover_error(locale: Locale, error: &crate::api::client::ApiError) -> String {
     match error.status() {
         Some(401) => gettext(
             locale,
-            "Spotify sign-in expired. Sign in again, then retry the cover upload.",
+            "Apple Music sign-in expired. Sign in again, then retry the cover upload.",
         )
         .into_owned(),
         Some(403) => gettext(
             locale,
-            "Spotify refused this cover. Check that you own the playlist, then sign in again to grant image upload permission. If you use your own Client ID, authorize it again in Settings too.",
+            "Apple Music refused this cover. Check that you own the playlist, then sign in again to grant image upload permission. If you use your own Client ID, authorize it again in Settings too.",
         )
         .into_owned(),
         Some(413) => {
-            gettext(locale, "Spotify rejected the image size. Choose a smaller image.").into_owned()
+            gettext(locale, "Apple Music rejected the image size. Choose a smaller image.").into_owned()
         }
         // Translators: {error} is an error message.
         _ => gettext(locale, "Couldn't upload the cover: {error}. Try again.")
@@ -16897,7 +16897,7 @@ mod tests {
             Some(&LibrarySort::Local)
         );
         assert_eq!(app.toasts.len(), toasts + 1);
-        assert!(app.toasts.last().unwrap().message.contains("Spotify"));
+        assert!(app.toasts.last().unwrap().message.contains("Apple Music"));
 
         arrange(&mut app);
         assert_eq!(
@@ -17227,7 +17227,7 @@ mod tests {
         });
         let playlist = app.playlist_pages["pl1"].playlist.get().unwrap();
         assert_eq!(playlist.public, Some(true));
-        assert_eq!(playlist.name, "Mine", "the rest is Spotify's answer");
+        assert_eq!(playlist.name, "Mine", "the rest is Apple Music's answer");
 
         // Spotify's own answer outranks the list, and a playlist the list
         // does not hold stays unknown rather than guessed.
@@ -20210,7 +20210,7 @@ mod tests {
         app.reconcile_remote_track_intent(8, Some("spotify:track:old"));
         assert!(
             app.intent_track.is_some(),
-            "one stale Spotify answer is retried"
+            "one stale Apple Music answer is retried"
         );
 
         app.reconcile_remote_track_intent(9, Some("spotify:track:actual"));
@@ -21285,7 +21285,7 @@ mod tests {
         app.set_shuffle(true);
         assert!(
             app.queue_recheck_at.is_some(),
-            "toggling shuffle asks Spotify for the reordered queue"
+            "toggling shuffle asks Apple Music for the reordered queue"
         );
     }
 
@@ -23635,20 +23635,20 @@ mod tests {
     fn soloist_binding_requires_one_exact_device_in_the_signed_in_account() {
         let mut app = test_app("soloist-bind");
         app.soloist_status = crate::soloist::Status::Ready {
-            name: "Spotifast Soloist (specific)".into(),
+            name: "Applebum Soloist (specific)".into(),
             version: "test".into(),
             expires: u64::MAX,
         };
         app.devices = vec![Device {
             id: Some("unrelated".into()),
-            name: "Spotifast Soloist".into(),
+            name: "Applebum Soloist".into(),
             ..Default::default()
         }];
         app.bind_soloist_device();
         assert!(app.soloist_device_id.is_none());
         let own = Device {
             id: Some("own".into()),
-            name: "Spotifast Soloist (specific)".into(),
+            name: "Applebum Soloist (specific)".into(),
             ..Default::default()
         };
         app.devices.push(own.clone());
@@ -25106,7 +25106,7 @@ mod tests {
         assert_eq!(app.toasts.len(), 1);
         assert_eq!(
             app.toasts[0].message,
-            "Spotify won't let this computer play this song right now."
+            "Apple Music won't let this computer play this song right now."
         );
 
         // After a song played, the next refusal is news again.
@@ -28933,7 +28933,7 @@ mod tests {
         assert_eq!(app.update, None);
         assert_eq!(
             app.toasts.last().map(|toast| toast.message.as_str()),
-            Some("Spotifast is up to date")
+            Some("Applebum is up to date")
         );
 
         app.toasts.clear();
@@ -28982,7 +28982,7 @@ mod tests {
         );
         assert_eq!(
             app.toasts.last().map(|toast| toast.message.as_str()),
-            Some("Spotifast 1.2.3 is available")
+            Some("Applebum 1.2.3 is available")
         );
     }
 
@@ -29757,7 +29757,7 @@ mod tests {
         assert!(
             app.toasts
                 .iter()
-                .any(|toast| toast.message == "The clipboard has no Spotify song links")
+                .any(|toast| toast.message == "The clipboard has no Apple Music song links")
         );
 
         // #when the playlist cannot be edited
@@ -31644,7 +31644,7 @@ mod tests {
         assert_eq!(request.context_uri.as_deref(), Some("spotify:playlist:pl1"));
         assert_eq!(
             request.offset_uri, None,
-            "by URI Spotify would start the first copy"
+            "by URI Apple Music would start the first copy"
         );
         assert_eq!(request.offset_position, Some(3));
         assert_eq!(local_load(request, false).offset_index, Some(3));
@@ -31782,7 +31782,7 @@ mod tests {
         assert_eq!(request.position_ms, 0);
         assert!(
             request.uris.is_empty(),
-            "retain the full Spotify playlist context"
+            "retain the full Apple Music playlist context"
         );
         let load = local_load(request, false);
         assert_eq!(load.offset_uri, Some(rows[0].clone()));
@@ -32061,7 +32061,7 @@ mod tests {
         assert!(app.backend.take_remote_play_requests().is_empty());
         assert!(
             app.backend.take_remote_shuffle_requests().is_empty(),
-            "without an active device, Shuffle stays pending instead of calling Spotify"
+            "without an active device, Shuffle stays pending instead of calling Apple Music"
         );
         assert!(
             app.toasts.is_empty(),
@@ -34673,7 +34673,7 @@ mod tests {
                 "unknown",
                 // Local playback is this computer, which Spotify has not
                 // named because it is not a remote device.
-                "Spotifast",
+                "Applebum",
             ]
         );
         // No devices seen yet is an empty array, not an empty string, so a

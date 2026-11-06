@@ -96,7 +96,7 @@ fn contents(app: &mut App, ui: &mut egui::Ui) {
     {
         let galley = crate::bidi::layout(
             ui.painter(),
-            &gettext(locale, "Connect Spotify to see listening activity."),
+            &gettext(locale, "Connect Apple Music to see listening activity."),
             theme::regular(13.0),
             palette.secondary,
             ui.available_width(),
@@ -129,7 +129,7 @@ fn contents(app: &mut App, ui: &mut egui::Ui) {
             &gettext(locale, "No listening activity"),
             &gettext(
                 locale,
-                "What the people you follow play on Spotify shows here.",
+                "What the people you follow play on Apple Music shows here.",
             ),
         ),
         Loadable::Loaded(friends) => {

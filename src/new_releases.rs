@@ -96,7 +96,7 @@ async fn read_feed(session: &Session, http: &Http) -> Result<Vec<Album>, ApiErro
     if !status.is_success() {
         return Err(ApiError::Status {
             status: status.as_u16(),
-            message: "Spotify couldn't load new releases through the playback session.".into(),
+            message: "Apple Music couldn't load new releases through the playback session.".into(),
         });
     }
     let body = response
@@ -111,7 +111,7 @@ fn session_error() -> ApiError {
 }
 
 fn response_error() -> ApiError {
-    ApiError::Decode("New releases are unavailable in Spotify's response. Try again later.".into())
+    ApiError::Decode("New releases are unavailable in Apple Music's response. Try again later.".into())
 }
 
 /// The first page of the feed, albums only, as Spotify's web player asks

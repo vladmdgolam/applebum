@@ -264,7 +264,10 @@ directories = "6"
 winresource = "0.1"
 
 [features]
-default = ["milkdrop", "soloist-native-audio"]
+default = ["milkdrop", "soloist-native-audio", "apple-music"]
+# Apple Music through MusicKit in place of Spotify. macOS only; the app must
+# run from a signed bundle whose App ID has MusicKit enabled.
+apple-music = []
 # Process-only Soloist audio: Mac EQ and visualizers, Windows visualizers.
 soloist-native-audio = ["dep:cc"]
 # Keep the existing maintainer preview command working.

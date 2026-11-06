@@ -543,7 +543,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     }
                     response.on_hover_text(gettext(
                         locale,
-                        "Spotifast is offline. Reconnecting automatically when connection returns.",
+                        "Applebum is offline. Reconnecting automatically when connection returns.",
                     ));
                 }
                 ui.add_space(4.0);
@@ -601,7 +601,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     let hint = match activity {
                         BackgroundActivity::Library => gettext(locale, "Updating your library…"),
                         BackgroundActivity::Updates => gettext(locale, "Checking for updates…"),
-                        BackgroundActivity::Spotify => gettext(locale, "Waiting for Spotify…"),
+                        BackgroundActivity::Spotify => gettext(locale, "Waiting for Apple Music…"),
                     };
                     theme::spinner(ui, SPINNER_SIZE, palette.secondary)
                         .on_hover_text(hint.as_ref());

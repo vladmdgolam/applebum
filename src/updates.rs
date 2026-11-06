@@ -18,8 +18,8 @@ static UPDATER: UpdaterCache = Mutex::new(None);
 
 pub const CONFIG: UpdateConfig = UpdateConfig {
     macos: MacConfig {
-        bundle_ids: &["rocks.spotifast.Spotifast"],
-        executable_names: &["Spotifast"],
+        bundle_ids: &["rocks.spotifast.Applebum"],
+        executable_names: &["Applebum"],
         legacy_bundle_names: &[],
     },
     // Releases publish an Ed25519 signature for checksums.txt. Require it
@@ -31,7 +31,7 @@ pub const CONFIG: UpdateConfig = UpdateConfig {
     appimage: true,
     ..UpdateConfig::new(
         "crmne/spotifast",
-        "Spotifast",
+        "Applebum",
         "spotifast",
         env!("CARGO_PKG_VERSION"),
     )

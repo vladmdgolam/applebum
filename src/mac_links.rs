@@ -47,7 +47,7 @@ mod mac_impl {
     define_class!(
         #[unsafe(super(NSObject))]
         #[thread_kind = MainThreadOnly]
-        #[name = "SpotifastLinkHandler"]
+        #[name = "ApplebumLinkHandler"]
         pub struct SpotifastLinkHandler;
 
         impl SpotifastLinkHandler {
@@ -69,7 +69,7 @@ mod mac_impl {
 
     fn deliver(text: &str) {
         let Some(uri) = crate::link::parse(text) else {
-            log::warn!("not a Spotify link: {text}");
+            log::warn!("not a Apple Music link: {text}");
             return;
         };
         let Ok(sink) = SINK.lock() else {

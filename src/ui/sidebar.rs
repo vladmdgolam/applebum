@@ -363,7 +363,7 @@ fn sort_menu(app: &mut App, ui: &mut egui::Ui, shelf: Filter, selected: LibraryS
         (LibrarySort::Local, gettext(locale, "Local custom order")),
         (
             LibrarySort::Spotify,
-            gettext(locale, "Spotify custom order"),
+            gettext(locale, "Apple Music custom order"),
         ),
     ];
     let label = &labels
@@ -3107,7 +3107,7 @@ mod ordering_tests {
         );
         assert!(
             liked_entry(&app).uri.is_empty(),
-            "the ordering key is never a Spotify URI"
+            "the ordering key is never a Apple Music URI"
         );
         app.backend.shutdown();
     }

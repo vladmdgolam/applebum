@@ -273,7 +273,7 @@ fn run_control(control: Control) -> i32 {
             }
         }
         Err(error) => {
-            eprintln!("Spotifast is not running or does not support remote control: {error}");
+            eprintln!("Applebum is not running or does not support remote control: {error}");
             return 1;
         }
     };
@@ -396,7 +396,7 @@ pub(crate) fn run() -> eframe::Result<()> {
         .map(|text| match spotifast::link::parse(text) {
             Some(uri) => uri,
             None => {
-                eprintln!("not a Spotify link: {text}");
+                eprintln!("not a Apple Music link: {text}");
                 std::process::exit(2);
             }
         });
@@ -419,11 +419,11 @@ pub(crate) fn run() -> eframe::Result<()> {
         match single_instance::acquire(&waker, link.as_deref(), hidden) {
             single_instance::Outcome::Only(guard) => Some(guard),
             single_instance::Outcome::Surfaced if hidden => {
-                log::info!("Spotifast is already running");
+                log::info!("Applebum is already running");
                 return Ok(());
             }
             single_instance::Outcome::Surfaced => {
-                log::info!("Spotifast is already running; asked it to show its window");
+                log::info!("Applebum is already running; asked it to show its window");
                 return Ok(());
             }
         }
@@ -457,7 +457,7 @@ pub(crate) fn run() -> eframe::Result<()> {
     // Launched from a desktop, stderr goes nowhere; keep the run's log where
     // a bug report can find it, and a line per panic in the panic log (with
     // any link in its message removed: a URL can carry a token).
-    if let Err(error) = fastframe_log::Logging::new("spotifast", env!("CARGO_PKG_VERSION"))
+    if let Err(error) = fastframe_log::Logging::new("applebum", env!("CARGO_PKG_VERSION"))
         .filter(default_filter)
         .file(dirs.log_file())
         .panic_log(dirs.panic_log())
@@ -728,7 +728,7 @@ pub(crate) fn run() -> eframe::Result<()> {
                 screen_asked: None,
             }))
         }));
-        fastframe_graphics::Graphics::new("Spotifast")
+        fastframe_graphics::Graphics::new("Applebum")
             .help(spotifast::window::DOWNLOAD_PAGE)
             .dialog(move |trouble| spotifast::window::no_window_dialog(locale, trouble))
             .run_native(
@@ -851,7 +851,7 @@ fn native_options(
     #[cfg(target_os = "linux")]
     let app_id = desktop_entry();
     #[cfg(not(target_os = "linux"))]
-    let app_id = "spotifast";
+    let app_id = "applebum";
     let icon = if cfg!(target_os = "macos") {
         // macOS takes the dock icon from the bundle's .icns, which is the
         // 1024px drawing with the platform's rounding. Setting a window
@@ -861,7 +861,7 @@ fn native_options(
         app_icon()
     };
     let viewport = egui::ViewportBuilder::default()
-        .with_title("Spotifast")
+        .with_title("Applebum")
         .with_app_id(app_id)
         .with_taskbar(true)
         .with_icon(icon);
@@ -1016,7 +1016,7 @@ mod native_window_tests {
         }
         #[cfg(not(target_os = "linux"))]
         {
-            assert_eq!(main.viewport.app_id.as_deref(), Some("spotifast"));
+            assert_eq!(main.viewport.app_id.as_deref(), Some("applebum"));
             assert_eq!(mini.viewport.app_id, main.viewport.app_id);
             assert_eq!(main.persistence_path, None);
         }

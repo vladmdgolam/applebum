@@ -34,7 +34,7 @@ use crate::settings::ProxyConfig;
 
 pub type ApiResult<T> = Result<T, ApiError>;
 
-const PREMIUM_NEEDED: &str = "Local playback needs Spotify Premium.";
+const PREMIUM_NEEDED: &str = "Local playback needs Apple Music Premium.";
 const ALBUM_TYPE_TIMEOUT: Duration = Duration::from_secs(30);
 // Leave time for access-point retries plus resolver and authentication work.
 const ENGINE_CONNECT_TIMEOUT: Duration = Duration::from_secs(75);
@@ -699,7 +699,7 @@ pub enum AutostartRequest {
 /// Spotifast's registration to start at login. The hidden start passes
 /// `--start-hidden`, which the command line takes.
 pub fn autostart() -> fastframe_autostart::Autostart {
-    fastframe_autostart::Autostart::new("spotifast", "Spotifast")
+    fastframe_autostart::Autostart::new("spotifast", "Applebum")
 }
 
 pub enum Command {
@@ -1848,6 +1848,8 @@ impl PlaylistHeaderLookup {
 
 struct Worker {
     soloist_output_volume: crate::soloist::OutputVolume,
+    #[cfg(feature = "apple-music")]
+    apple: Option<crate::apple::Client>,
     soloist: Option<crate::soloist::Handle>,
     soloist_generation: u64,
     dirs: AppDirs,
@@ -1978,6 +1980,8 @@ impl Worker {
     ) -> Self {
         Self {
             soloist_output_volume: crate::soloist::OutputVolume::default(),
+            #[cfg(feature = "apple-music")]
+            apple: None,
             soloist: None,
             soloist_generation: 0,
             #[cfg(not(test))]
@@ -2448,6 +2452,12 @@ impl Worker {
                     self.resume_engine();
                 }
                 Command::ApplyProxy { request, config } => self.change_proxy(request, config, None),
+                #[cfg(feature = "apple-music")]
+                Command::Player(command) if self.apple.is_some() => {
+                    if let Some(apple) = &self.apple {
+                        apple.player(command);
+                    }
+                }
                 Command::Player(command) => {
                     if matches!(&command, PlayerCommand::Load(_)) {
                         self.resume = None;
@@ -3010,6 +3020,15 @@ impl Worker {
         if std::mem::replace(&mut self.spotify_restore_started, true) {
             return;
         }
+        #[cfg(feature = "apple-music")]
+        {
+            self.apple = Some(crate::apple::Client::start(
+                self.events.clone(),
+                self.waker.clone(),
+                Arc::clone(&self.engine_config.tap),
+            ));
+            return;
+        }
         self.restore_pending = [true; 3];
         self.api
             .set_state(ApiSource::Shared, SessionState::Authorizing);
@@ -3081,7 +3100,7 @@ impl Worker {
                         // in Settings while a shared grant keeps the app
                         // signed in (#634).
                         let message = if source == ApiSource::Shared {
-                            "Spotify permissions changed. Sign in with your Client ID."
+                            "Apple Music permissions changed. Sign in with your Client ID."
                         } else {
                             "Spotify permissions changed for your Client ID. Authorize it \
                              again, with Sign in or in Settings, under Account."
@@ -3161,7 +3180,7 @@ impl Worker {
                     Err(error @ ApiError::SignInExpired { .. }) => break error,
                     Err(error) if error.status().is_some_and(|status| status < 500) => break error,
                     Err(error) => {
-                        log::warn!("Spotify sign-in verification will retry: {error}");
+                        log::warn!("Apple Music sign-in verification will retry: {error}");
                         tokio::time::sleep(wait).await;
                         wait = (wait * 2).min(Duration::from_secs(60));
                         if !matches!(gateway.state(source), SessionState::Authorizing) {
@@ -3206,7 +3225,7 @@ impl Worker {
             self.emit(Event::SharedGrant(false));
         }
         let message = match source {
-            ApiSource::Shared => format!("Shared Spotify sign-in failed: {error}"),
+            ApiSource::Shared => format!("Shared Apple Music sign-in failed: {error}"),
             ApiSource::Personal => format!("Client ID authorization failed: {error}"),
         };
         let other_ready = match source {
@@ -3558,7 +3577,7 @@ impl Worker {
         let Some(credentials) = playback_credentials(self.api.account(), access_token) else {
             self.engine_busy = false;
             self.emit(Event::Playback(LocalPlayback::Failed(
-                "Finish signing in to Spotify before enabling playback.".into(),
+                "Finish signing in to Apple Music before enabling playback.".into(),
             )));
             return;
         };
@@ -3623,7 +3642,7 @@ impl Worker {
             {
                 self.pending_playback_grant = None;
                 self.emit(Event::Playback(LocalPlayback::Failed(
-                    "Stored playback belongs to another Spotify account. Enable playback again."
+                    "Stored playback belongs to another Apple Music account. Enable playback again."
                         .into(),
                 )));
                 return;
@@ -4030,7 +4049,7 @@ impl Worker {
                     lease: lease.clone(),
                     session_generation,
                     engine: Box::new(None),
-                    error: Some("Connecting to Spotify timed out".into()),
+                    error: Some("Connecting to Apple Music timed out".into()),
                     attempt,
                 },
             };
@@ -4085,8 +4104,8 @@ impl Worker {
                 if let Some(grant) = engine.credentials() {
                     if !playback_account_matches(&grant, self.api.account()) {
                         engine.shutdown();
-                        self.fail_waiting_prerelease("Playback was authorized for another Spotify account. Enable playback again with the signed-in account.");
-                        self.emit(Event::Playback(LocalPlayback::Failed("Playback was authorized for another Spotify account. Enable playback again with the signed-in account.".into())));
+                        self.fail_waiting_prerelease("Playback was authorized for another Apple Music account. Enable playback again with the signed-in account.");
+                        self.emit(Event::Playback(LocalPlayback::Failed("Playback was authorized for another Apple Music account. Enable playback again with the signed-in account.".into())));
                         return;
                     }
                     self.playback_grant = Some(grant.clone());
@@ -4279,7 +4298,7 @@ impl Worker {
                 if !lease.current() {
                     return Err("Sign-in changed before receiver activation.".into());
                 }
-                crate::zeroconf::add_user(&http, &receiver, &info, &credentials, "Spotifast")
+                crate::zeroconf::add_user(&http, &receiver, &info, &credentials, "Applebum")
                     .map_err(|error| error.to_string())
             })();
             let _ = events.send(Event::ReceiverActivated { name, result });
@@ -4319,6 +4338,11 @@ impl Worker {
     }
 
     fn check_for_updates(&self, manual: bool, source: crate::updates::Source) {
+        // Upstream's releases are Spotify builds: never replace this app with one.
+        #[cfg(feature = "apple-music")]
+        if self.apple.is_some() {
+            return;
+        }
         // A proxy still being restored or refused blocks the check, as it
         // blocks every other request.
         let usable = self.http.client().map(|_| ());
@@ -4547,7 +4571,7 @@ impl Worker {
                                 log::warn!("radio {station} failed: {error:#}");
                                 Err("Couldn't load this radio. Try again.".to_string())
                             }
-                            Err(_) => Err("Spotify took too long to answer. Try again.".into()),
+                            Err(_) => Err("Apple Music took too long to answer. Try again.".into()),
                         }
                     }
                     None => Err("There is no radio for this item.".into()),
@@ -4594,7 +4618,7 @@ impl Worker {
                     session_reads::remove_playlist_rows(engine.session(), &playlist_id, &rows),
                 ) => match result {
                     Ok(result) => result.map_err(|error| format!("{error:#}")),
-                    Err(_) => Err("Spotify took too long to answer. Check the playlist and try again.".into()),
+                    Err(_) => Err("Apple Music took too long to answer. Check the playlist and try again.".into()),
                 },
             };
             let _ = events.send(answer(playlist_id, result));
@@ -4624,7 +4648,7 @@ impl Worker {
                 _ = cancelled.changed() => return,
                 result = tokio::time::timeout(RADIO_TIMEOUT, session_reads::set_prerelease_saved(engine.session(), &http, &uri, saved)) => match result {
                     Ok(result) => result.map_err(|error| format!("{error:#}")),
-                    Err(_) => Err("Spotify took too long to confirm pre-save. Open the link again to check.".into()),
+                    Err(_) => Err("Apple Music took too long to confirm pre-save. Open the link again to check.".into()),
                 }
                 },
             };
@@ -4691,7 +4715,7 @@ impl Worker {
                 _ = cancelled.changed() => return,
                 result = tokio::time::timeout(RADIO_TIMEOUT, session_reads::prerelease(engine.session(), &web, &uri)) => match result {
                     Ok(result) => result.map_err(|error| format!("{error:#}")),
-                    Err(_) => Err("Spotify took too long to load this upcoming album. Try the link again.".into()),
+                    Err(_) => Err("Apple Music took too long to load this upcoming album. Try the link again.".into()),
                 }
             };
             log::info!(
@@ -4879,7 +4903,7 @@ impl Worker {
                 // A later visit asks again.
                 _ = cancelled.changed() => Err("The playback session ended.".to_string()),
                 result = read => result
-                    .map_err(|_| "Spotify took too long to answer.".to_string())
+                    .map_err(|_| "Apple Music took too long to answer.".to_string())
                     .and_then(|result| result.map_err(|error| format!("{error:#}"))),
             };
             if let Err(error) = &result {
@@ -4916,7 +4940,7 @@ impl Worker {
                 _ = cancelled.changed() => return,
                 result = read => result,
             }
-            .map_err(|_| "Spotify took too long to answer.".to_string())
+            .map_err(|_| "Apple Music took too long to answer.".to_string())
             .and_then(|result| result.map_err(|error| error.to_string()));
             send(result);
         });
@@ -4960,6 +4984,8 @@ impl Worker {
 
     /// Cancel requests on sign-out and report completion under their original generation.
     fn dispatch(&self, request: ApiRequest) -> tokio::task::AbortHandle {
+        #[cfg(feature = "apple-music")]
+        let apple = self.apple.is_some();
         let soloist = self
             .soloist
             .as_ref()
@@ -4990,6 +5016,10 @@ impl Worker {
             let (response, expired) = tokio::select! {
                 _ = session.changed() => return,
                 result = async {
+                    #[cfg(feature = "apple-music")]
+                    if apple && let Some(response) = crate::apple::dispatch(&request).await {
+                        return (response, Vec::new());
+                    }
                     if let Some(soloist) = soloist && let Some(response) = soloist.dispatch(&request).await {
                         return (response, Vec::new());
                     }
@@ -5036,11 +5066,11 @@ fn friendly_connect_error(error: &anyhow::Error) -> String {
     let text = format!("{error:#}");
     let lower = text.to_lowercase();
     if lower.contains("badcredentials") || lower.contains("bad credentials") {
-        "Spotify rejected the saved sign-in. Please sign in again.".to_string()
+        "Apple Music rejected the saved sign-in. Please sign in again.".to_string()
     } else if lower.contains("premium") {
         PREMIUM_NEEDED.to_string()
     } else if lower.contains("dns") || lower.contains("connect") || lower.contains("resolve") {
-        format!("Couldn't reach Spotify: {text}")
+        format!("Couldn't reach Apple Music: {text}")
     } else {
         text
     }
@@ -5224,7 +5254,7 @@ async fn read_new_releases(
         let _permit = background_session.acquire().await.ok();
         match new_releases.feed(engine.session()).await {
             Ok(albums) => {
-                log::debug!("Spotify route operation=NewReleases source=session");
+                log::debug!("Apple Music route operation=NewReleases source=session");
                 return Ok(albums);
             }
             Err(error) => {
@@ -5242,7 +5272,7 @@ async fn read_new_releases(
     if let Some(account) = &account {
         new_releases.keep_fallback(account, &albums).await;
     }
-    log::debug!("Spotify route operation=NewReleases source=web-api");
+    log::debug!("Apple Music route operation=NewReleases source=web-api");
     Ok(albums)
 }
 
@@ -5392,7 +5422,7 @@ async fn shared_made_for_you(api: &ApiGateway) -> ApiResult<Vec<Playlist>> {
             .collect();
         playlists.append(&mut matching);
     }
-    log::debug!("Spotify route operation=MadeForYou source=shared-fallback");
+    log::debug!("Apple Music route operation=MadeForYou source=shared-fallback");
     Ok(playlists)
 }
 
@@ -5576,7 +5606,7 @@ async fn handle(
             over_session(engine, web.as_deref(), &request).await
         };
         if let Some(response) = response {
-            log::debug!("Spotify route operation={operation:?} source=session");
+            log::debug!("Apple Music route operation={operation:?} source=session");
             observe_playlists(api, &response);
             return (response, Vec::new());
         }
@@ -5585,7 +5615,7 @@ async fn handle(
         engine.filter(|engine| same_account(&engine.session().username(), api.account().as_ref()))
         && let Some(response) = over_connect(engine, connect, &request).await
     {
-        log::debug!("Spotify route operation={operation:?} source=connect");
+        log::debug!("Apple Music route operation={operation:?} source=connect");
         return (response, Vec::new());
     }
     let selected = api.client_for(operation).await;
@@ -6062,7 +6092,7 @@ async fn handle(
     {
         connect.mark_restricted(&device);
         if let Some(response) = over_connect(engine, connect, &request).await {
-            log::debug!("Spotify route operation={operation:?} source=connect after refusal");
+            log::debug!("Apple Music route operation={operation:?} source=connect after refusal");
             return (response, Vec::new());
         }
     }
@@ -8841,7 +8871,7 @@ mod authorization_tests {
         verify(&mut worker, ApiSource::Shared, "alice");
         worker.playback_grant = Some(Credentials::with_password("alice", "dummy-grant"));
         let session = worker.album_type_lookup.session_generation;
-        let reset = "Couldn't reach Spotify: connection reset";
+        let reset = "Couldn't reach Apple Music: connection reset";
 
         worker.connect_engine(Credentials::with_password("alice", "dummy-grant"));
         worker.on_engine_connected(session, None, Some(reset.into()), worker.engine_attempt);
@@ -8886,7 +8916,7 @@ mod authorization_tests {
         worker.on_engine_connected(
             session,
             None,
-            Some("Spotify rejected the saved sign-in. Please sign in again.".into()),
+            Some("Apple Music rejected the saved sign-in. Please sign in again.".into()),
             worker.engine_attempt,
         );
         assert_eq!(failed(&events).len(), 1);
@@ -8945,7 +8975,7 @@ mod authorization_tests {
         worker.on_engine_connected(
             session,
             None,
-            Some("Spotify rejected the saved sign-in. Please sign in again.".into()),
+            Some("Apple Music rejected the saved sign-in. Please sign in again.".into()),
             worker.engine_attempt,
         );
         let messages = failed(&events);
@@ -10081,7 +10111,7 @@ mod tests {
         assert!(!shared_made_for_you_match(&playlist, "Daily Mix"));
         playlist.name = "Daily Mix 3".into();
         playlist.owner.id = Some("other".into());
-        playlist.owner.display_name = Some("Spotify".into());
+        playlist.owner.display_name = Some("Apple Music".into());
         assert!(!shared_made_for_you_match(&playlist, "Daily Mix"));
         playlist.owner.id = None;
         assert!(!shared_made_for_you_match(&playlist, "Daily Mix"));
@@ -10476,7 +10506,7 @@ mod tests {
         worker.on_engine_connected(
             session_generation,
             None,
-            Some("Connecting to Spotify timed out".into()),
+            Some("Connecting to Apple Music timed out".into()),
             1,
         );
 
@@ -10515,7 +10545,7 @@ mod tests {
         worker.on_engine_connected(
             session_generation,
             None,
-            Some("Spotify rejected the saved sign-in. Please sign in again.".into()),
+            Some("Apple Music rejected the saved sign-in. Please sign in again.".into()),
             1,
         );
 

@@ -224,7 +224,7 @@ pub(super) fn show(app: &mut App, ui: &mut egui::Ui, data: &Prerelease) {
                     .corner_radius(24)
                     .min_size(vec2(content_width + 48.0, 48.0)),
             )
-            .on_hover_text(gettext(locale, "Pre-save on Spotify"));
+            .on_hover_text(gettext(locale, "Pre-save on Apple Music"));
         save_button.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, save_label.as_ref())
         });
@@ -268,7 +268,7 @@ pub(super) fn show(app: &mut App, ui: &mut egui::Ui, data: &Prerelease) {
                     app.actions.push(Action::CopyLink(data.uri.clone()));
                     ui.close();
                 }
-                if ui.button(gettext(locale, "Open in Spotify")).clicked() {
+                if ui.button(gettext(locale, "Open in Apple Music")).clicked() {
                     let id = data.uri.rsplit(':').next().unwrap_or_default();
                     app.actions.push(Action::OpenUrl(format!(
                         "https://open.spotify.com/prerelease/{id}?spotifast_web=1"

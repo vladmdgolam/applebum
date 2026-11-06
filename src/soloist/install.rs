@@ -155,7 +155,7 @@ pub fn parse_version(text: &str, at: u64) -> Result<(String, u64)> {
         .parse()?;
     ensure!(
         built <= at.saturating_add(DAY) && at < built.saturating_add(90 * DAY),
-        "Spotify's downloaded Soloist build has expired. Check the computer's date and try again later."
+        "Apple Music's downloaded Soloist build has expired. Check the computer's date and try again later."
     );
     Ok((version, built))
 }
@@ -259,7 +259,7 @@ pub async fn download(
     progress: &(dyn Fn(u64, u64) + Send + Sync),
 ) -> Result<Build> {
     let artifact = artifact(std::env::consts::OS, std::env::consts::ARCH)
-        .context("Spotify does not publish Soloist for this platform")?;
+        .context("Apple Music does not publish Soloist for this platform")?;
     let mut response = http
         .client()
         .map_err(anyhow::Error::msg)?
@@ -270,7 +270,7 @@ pub async fn download(
         .error_for_status()?;
     ensure!(
         response.url().scheme() == "https" && response.url().host_str() == Some(CDN),
-        "Soloist download left Spotify's download server"
+        "Soloist download left Apple Music's download server"
     );
     let total = response.content_length().unwrap_or(0);
     ensure!(
@@ -473,7 +473,7 @@ mod tests {
         }
     }
     #[test]
-    #[ignore = "requires SOLOIST_QA_ZIP pointing to Spotify's current official Windows archive"]
+    #[ignore = "requires SOLOIST_QA_ZIP pointing to Apple Music's current official Windows archive"]
     fn official_windows_archive_extracts() {
         let bytes = std::fs::read(std::env::var("SOLOIST_QA_ZIP").unwrap()).unwrap();
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

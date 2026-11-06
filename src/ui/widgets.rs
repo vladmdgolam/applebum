@@ -1231,7 +1231,7 @@ fn item_menu_at(
         ui,
         &palette,
         Some(Icon::ExternalLink),
-        &gettext(locale, "Open in Spotify"),
+        &gettext(locale, "Open in Apple Music"),
     ) {
         app.actions.push(Action::OpenInSpotify(uri));
     }
@@ -1343,7 +1343,7 @@ pub fn context_menu_items(
         ui,
         &palette,
         Some(Icon::ExternalLink),
-        &gettext(locale, "Open in Spotify"),
+        &gettext(locale, "Open in Apple Music"),
     ) {
         app.actions.push(Action::OpenInSpotify(uri.to_string()));
     }
@@ -3701,7 +3701,7 @@ pub fn proxy_scope_note(
         ),
         crate::settings::ProxyMode::Socks => gettext(
             locale,
-            "Spotify hostnames are resolved by the proxy. Local playback connects directly.",
+            "Apple Music hostnames are resolved by the proxy. Local playback connects directly.",
         ),
         crate::settings::ProxyMode::Off | crate::settings::ProxyMode::System => return,
     };

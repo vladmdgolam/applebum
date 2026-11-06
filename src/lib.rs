@@ -1,6 +1,8 @@
 //! Spotifast's internals, exposed so diagnostics and tests can reach them.
 
 pub mod account_cache;
+#[cfg(feature = "apple-music")]
+pub mod apple;
 pub mod api;
 pub mod app;
 #[cfg(target_os = "linux")]

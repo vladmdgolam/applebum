@@ -121,13 +121,13 @@ pub async fn device_token(session: &Session, client_id: &str, device_id: &str) -
     );
     let reply = tokio::time::timeout(TIMEOUT, request)
         .await
-        .map_err(|_| anyhow!("Spotify did not issue a token for the Cast device in time"))?
-        .map_err(|error| anyhow!("Spotify refused a token for the Cast device: {error}"))?;
+        .map_err(|_| anyhow!("Apple Music did not issue a token for the Cast device in time"))?
+        .map_err(|error| anyhow!("Apple Music refused a token for the Cast device: {error}"))?;
     let reply: Value = serde_json::from_slice(&reply)?;
     reply["accessToken"]
         .as_str()
         .map(str::to_owned)
-        .ok_or_else(|| anyhow!("Spotify's token reply has no accessToken"))
+        .ok_or_else(|| anyhow!("Apple Music's token reply has no accessToken"))
 }
 
 /// One attempt of [`start`] over an open connection, until `deadline`. The
@@ -197,7 +197,7 @@ impl<S: Stream> Channel<'_, S> {
         self.send(PLATFORM, NS_RECEIVER, launch)?;
         let transport = self.wait(NS_RECEIVER, |message| match message["type"].as_str() {
             Some("LAUNCH_ERROR" | "INVALID_REQUEST") => Some(Err(anyhow!(
-                "the Cast device could not start Spotify: {}",
+                "the Cast device could not start Apple Music: {}",
                 message["reason"].as_str().unwrap_or("no reason given")
             ))),
             Some("RECEIVER_STATUS") => message["status"]["applications"]
@@ -208,7 +208,7 @@ impl<S: Stream> Channel<'_, S> {
                 .map(|id| Ok(id.to_owned())),
             _ => None,
         })?;
-        log::debug!("Spotify is running as {transport}");
+        log::debug!("Apple Music is running as {transport}");
         Ok(transport)
     }
 
@@ -230,7 +230,7 @@ impl<S: Stream> Channel<'_, S> {
                 message["payload"]["clientID"]
                     .as_str()
                     .map(str::to_owned)
-                    .ok_or_else(|| anyhow!("Spotify on the Cast device sent no clientID")),
+                    .ok_or_else(|| anyhow!("Apple Music on the Cast device sent no clientID")),
             ),
             _ => None,
         })
@@ -258,7 +258,7 @@ impl<S: Stream> Channel<'_, S> {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("Spotify on the Cast device refused the account: {0}")]
+#[error("Apple Music on the Cast device refused the account: {0}")]
 struct Refused(String);
 
 impl<S: Stream> Channel<'_, S> {

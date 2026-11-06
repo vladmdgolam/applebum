@@ -31,15 +31,15 @@ pub enum ApiError {
     NotSignedIn,
     #[error("{message}")]
     Status { status: u16, message: String },
-    #[error("Spotify is rate limiting requests; try again in a moment")]
+    #[error("Apple Music is rate limiting requests; try again in a moment")]
     RateLimited,
-    #[error("Spotify's Development Mode quota is exhausted; try again after the quota resets")]
+    #[error("Apple Music's Development Mode quota is exhausted; try again after the quota resets")]
     QuotaExhausted,
-    #[error("your Spotify sign-in expired; please sign in again")]
+    #[error("your Apple Music sign-in expired; please sign in again")]
     SignInExpired { api_source: ApiSource },
     #[error("network error: {0}")]
     Network(String),
-    #[error("unexpected response from Spotify: {0}")]
+    #[error("unexpected response from Apple Music: {0}")]
     Decode(String),
 }
 
@@ -500,7 +500,7 @@ impl ApiClient {
         if !status.is_success() {
             return Err(ApiError::Status {
                 status: status.as_u16(),
-                message: "Spotify upcoming-album request failed".into(),
+                message: "Apple Music upcoming-album request failed".into(),
             });
         }
         response.json().await.map_err(ApiError::from)
@@ -618,10 +618,10 @@ impl ApiClient {
                 } else {
                     wait.min(MAX_RETRY_AFTER)
                 };
-                log::warn!("Spotify rate limit source={} wait={wait:?}", self.source);
+                log::warn!("Apple Music rate limit source={} wait={wait:?}", self.source);
                 self.activity.note_rate_limit(self.source);
                 log::info!(
-                    "Spotify cooldown source={} duration_ms={}",
+                    "Apple Music cooldown source={} duration_ms={}",
                     self.source,
                     wait.as_millis()
                 );
@@ -639,7 +639,7 @@ impl ApiClient {
             }
             let text = response.text().await?;
             log::debug!(
-                "Spotify request source={} method={} path={} status={} duration_ms={}",
+                "Apple Music request source={} method={} path={} status={} duration_ms={}",
                 self.source,
                 method,
                 logged_path(path),
@@ -710,7 +710,7 @@ impl ApiClient {
             Ok(value) => Ok(Some(value)),
             Err(error) => {
                 log::debug!(
-                    "Spotify write source={} returned a non-JSON success body: {error}",
+                    "Apple Music write source={} returned a non-JSON success body: {error}",
                     self.source
                 );
                 Ok(None)

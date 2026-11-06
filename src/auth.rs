@@ -94,7 +94,7 @@ impl Grant {
     pub fn personal_web_api(client_id: &str) -> Result<Self> {
         let client_id = client_id.trim();
         if client_id.is_empty() {
-            bail!("a Spotify Client ID is required");
+            bail!("a Apple Music Client ID is required");
         }
         Ok(Self {
             client_id: client_id.to_string(),
@@ -206,7 +206,7 @@ pub struct TokenResponse {
 pub fn listen_for_redirect(port: u16) -> Result<TcpListener> {
     let address: SocketAddr = ([127, 0, 0, 1], port).into();
     let listener = std::net::TcpListener::bind(address).with_context(|| {
-        format!("Cannot start Spotify sign-in: port {port} is in use or unavailable. Close the app using this port, then try again.")
+        format!("Cannot start Apple Music sign-in: port {port} is in use or unavailable. Close the app using this port, then try again.")
     })?;
     listener.set_nonblocking(true)?;
     Ok(TcpListener::from_std(listener)?)
@@ -288,12 +288,12 @@ fn parse_request_line(line: &str, expected_state: &str) -> Result<String> {
         }
     }
     if error.is_some() {
-        bail!("Spotify refused the sign-in. Try again.");
+        bail!("Apple Music refused the sign-in. Try again.");
     }
     if state.as_deref() != Some(expected_state) {
         bail!("state mismatch");
     }
-    code.ok_or_else(|| anyhow!("Spotify did not return an authorization code"))
+    code.ok_or_else(|| anyhow!("Apple Music did not return an authorization code"))
 }
 
 pub async fn exchange_code(
@@ -335,7 +335,7 @@ pub async fn refresh(
 #[derive(Debug, thiserror::Error)]
 pub enum TokenEndpointError {
     /// Spotify refused the grant itself; only the browser can mint a new one.
-    #[error("Spotify rejected the token request ({status}): {detail}")]
+    #[error("Apple Music rejected the token request ({status}): {detail}")]
     Rejected { status: u16, detail: String },
     /// The endpoint could not answer; the grant may still be valid.
     #[error("token request failed: {0}")]
@@ -367,10 +367,10 @@ fn decode_token_response(
         // Report only known classifications, never authorization response text.
         let detail = match value.as_ref().and_then(|value| value["error"].as_str()) {
             Some("invalid_grant") => "The grant expired or was revoked. Sign in again.",
-            Some("invalid_client") => "Check the Spotify application's Client ID.",
-            Some("invalid_scope") => "Spotify did not accept the requested permissions.",
-            Some("access_denied") => "Spotify authorization was declined.",
-            _ => "Sign in again and check the Spotify application settings.",
+            Some("invalid_client") => "Check the Apple Music application's Client ID.",
+            Some("invalid_scope") => "Apple Music did not accept the requested permissions.",
+            Some("access_denied") => "Apple Music authorization was declined.",
+            _ => "Sign in again and check the Apple Music application settings.",
         };
         return Err(TokenEndpointError::Rejected {
             status: status.as_u16(),
@@ -379,11 +379,11 @@ fn decode_token_response(
     }
     if !status.is_success() {
         return Err(TokenEndpointError::Unreachable(format!(
-            "Spotify answered {status}"
+            "Apple Music answered {status}"
         )));
     }
     serde_json::from_str(text).map_err(|_| {
-        TokenEndpointError::Unreachable("Spotify returned an unreadable token response".into())
+        TokenEndpointError::Unreachable("Apple Music returned an unreadable token response".into())
     })
 }
 
@@ -409,7 +409,7 @@ impl StoredToken {
         let refresh_token = response
             .refresh_token
             .or_else(|| previous_refresh.map(str::to_string))
-            .ok_or_else(|| anyhow!("Spotify did not return a refresh token"))?;
+            .ok_or_else(|| anyhow!("Apple Music did not return a refresh token"))?;
         Ok(Self {
             client_id: client_id.to_string(),
             access_token: response.access_token,
@@ -495,9 +495,9 @@ main{{max-width:28rem;padding:2.5rem;border-radius:1.25rem;background:#181b20;bo
 
 fn success_page() -> String {
     page(
-        "Signed in to Spotifast",
+        "Signed in to Applebum",
         "You're signed in",
-        "You can close this tab and go back to Spotifast.",
+        "You can close this tab and go back to Applebum.",
         "#1ed760",
     )
 }
@@ -506,7 +506,7 @@ fn failure_page(reason: &str) -> String {
     page(
         "Sign-in failed",
         "Sign-in didn't complete",
-        &format!("{reason}. Return to Spotifast and try again."),
+        &format!("{reason}. Return to Applebum and try again."),
         "#f5717f",
     )
 }

@@ -1008,7 +1008,7 @@ fn extras(app: &mut App, ui: &mut egui::Ui, now: Option<&NowPlaying>, transport_
         )
         .on_hover_text(gettext(
             app.locale,
-            "This device's volume can't be changed from Spotifast",
+            "This device's volume can't be changed from Applebum",
         ));
     }
     ui.add_space(4.0);
@@ -1225,7 +1225,7 @@ mod player_bar_tint_tests {
             Color32::from_rgb(20, 30, 90),
             Color32::WHITE,
             Color32::BLACK,
-            Color32::from_rgb(30, 215, 96),
+            Color32::from_rgb(250, 45, 72),
         ] {
             let art = [[base.r(), base.g(), base.b()]];
             for (art, accent) in [(Some(&art[..]), Color32::RED), (None, base)] {
@@ -1279,7 +1279,7 @@ mod player_bar_tint_tests {
         assert!(colours[0].r() > colours[0].g() * 2, "{colours:?}");
         assert!(spread(colours[1]) < 24, "{colours:?}");
 
-        let accent = Color32::from_rgb(30, 215, 96);
+        let accent = Color32::from_rgb(250, 45, 72);
         assert_eq!(vis_colours(None, accent, true).len(), 2);
     }
 

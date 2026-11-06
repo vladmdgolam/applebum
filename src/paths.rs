@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 /// logs of its runs.
 const FOLDERS: fastframe_dirs::App = fastframe_dirs::App {
     not_copied: &["instance", "spotifast.log", "panic.log"],
-    ..fastframe_dirs::App::new("spotifast", "me", "paolino", "spotifast")
+    ..fastframe_dirs::App::new("applebum", "xyz", "vladik", "applebum")
 };
 
 #[derive(Clone, Debug)]
@@ -277,7 +277,7 @@ fn account_file_name(account_id: &str) -> String {
 /// What eframe remembers about the main window, in the folder it picks
 /// itself, which on Windows is `%APPDATA%\spotifast\data`.
 pub fn installed_window_file() -> Option<PathBuf> {
-    eframe::storage_dir("spotifast").map(|dir| dir.join("app.ron"))
+    eframe::storage_dir("applebum").map(|dir| dir.join("app.ron"))
 }
 
 /// Gives a portable copy that has no window file yet a copy of `from`, so
@@ -386,7 +386,7 @@ mod tests {
     fn the_log_says_which_folders_a_portable_copy_uses_and_why() {
         let installed = AppDirs::from(fastframe_dirs::Dirs::inside(Path::new("/user")));
         assert!(describe(&installed, &fastframe_dirs::Mode::Installed).is_none());
-        let folder = PathBuf::from("/usb/Spotifast/spotifast-data");
+        let folder = PathBuf::from("/usb/Applebum/spotifast-data");
         let portable = AppDirs::from(fastframe_dirs::Dirs::inside(&folder));
         let (level, line) = describe(
             &portable,

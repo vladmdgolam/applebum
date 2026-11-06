@@ -58,7 +58,7 @@ fn related_artist_headers(body: &serde_json::Value) -> Result<Vec<Artist>, Failu
         .pointer("/data/artistUnion/relatedContent/relatedArtists/items")
         .and_then(serde_json::Value::as_array)
         .ok_or_else(|| {
-            Failure::Retry(anyhow::anyhow!("Spotify related artists are unavailable"))
+            Failure::Retry(anyhow::anyhow!("Apple Music related artists are unavailable"))
         })?;
     let mut found = Vec::new();
     for data in entries {
@@ -105,7 +105,7 @@ fn related_artist_headers(body: &serde_json::Value) -> Result<Vec<Artist>, Failu
     }
     if !entries.is_empty() && found.is_empty() {
         return Err(Failure::Retry(anyhow::anyhow!(
-            "Spotify related artist cards could not be decoded"
+            "Apple Music related artist cards could not be decoded"
         )));
     }
     Ok(found)
@@ -222,7 +222,7 @@ pub async fn prerelease(
         }
         anyhow::ensure!(
             matches!(array.header.provider_error_status, 0 | 200),
-            "Spotify could not resolve this prerelease"
+            "Apple Music could not resolve this prerelease"
         );
         for data in &array.extension_data {
             if data.entity_uri != uri {
@@ -230,7 +230,7 @@ pub async fn prerelease(
             }
             anyhow::ensure!(
                 matches!(data.header.status_code, 0 | 200),
-                "Spotify prerelease answered {}",
+                "Apple Music prerelease answered {}",
                 data.header.status_code
             );
             let bytes = &data
@@ -241,7 +241,7 @@ pub async fn prerelease(
             page = Some(crate::prerelease::Prerelease::decode(bytes, uri)?);
         }
     }
-    let mut page = page.ok_or_else(|| anyhow::anyhow!("Spotify did not return this prerelease"))?;
+    let mut page = page.ok_or_else(|| anyhow::anyhow!("Apple Music did not return this prerelease"))?;
     let login = session.login5().auth_token().await?;
     let client_token = session.spclient().client_token().await?;
     let mut offset = 0;
@@ -257,7 +257,7 @@ pub async fn prerelease(
         let (rows, total) = page.album_preview(&body)?;
         anyhow::ensure!(
             offset == 0 || page.album.total_tracks == Some(total),
-            "Spotify changed this track list while loading"
+            "Apple Music changed this track list while loading"
         );
         page.album.total_tracks = Some(total);
         offset += rows.len();
@@ -267,7 +267,7 @@ pub async fn prerelease(
         }
         anyhow::ensure!(
             offset > 0 && offset <= 1000,
-            "Spotify returned an incomplete track list"
+            "Apple Music returned an incomplete track list"
         );
     }
     match prerelease_saved(session, &page.album.uri).await {
@@ -300,7 +300,7 @@ pub async fn hidden_songs(session: &Session) -> anyhow::Result<Vec<(String, Stri
         }
         token = page.next_page_token;
     }
-    anyhow::bail!("Spotify kept paging the hidden songs")
+    anyhow::bail!("Apple Music kept paging the hidden songs")
 }
 
 fn hidden_pairs(
@@ -420,7 +420,7 @@ pub async fn page_metadata(
                     .await?;
                 let page = body
                     .pointer("/data/albumUnion/tracksV2")
-                    .ok_or_else(|| anyhow::anyhow!("Spotify answered without the album's songs"))?;
+                    .ok_or_else(|| anyhow::anyhow!("Apple Music answered without the album's songs"))?;
                 let rows = play_counts_from(page, &mut counts);
                 let total = page
                     .get("totalCount")
@@ -447,7 +447,7 @@ pub async fn page_metadata(
                 body.get("errors").is_none_or(
                     |errors| errors.is_null() || errors.as_array().is_some_and(Vec::is_empty)
                 ),
-                "Spotify could not return this artist overview"
+                "Apple Music could not return this artist overview"
             );
             upcoming = upcoming_release(
                 body.pointer("/data/artistUnion")
@@ -455,13 +455,13 @@ pub async fn page_metadata(
             );
             let top = body
                 .pointer("/data/artistUnion/discography/topTracks")
-                .ok_or_else(|| anyhow::anyhow!("Spotify answered without the popular songs"))?;
+                .ok_or_else(|| anyhow::anyhow!("Apple Music answered without the popular songs"))?;
             play_counts_from(top, &mut counts);
             if let Some(listeners) = monthly_listeners(&body) {
                 counts.insert(uri.to_string(), listeners);
             }
         }
-        _ => anyhow::bail!("Spotify counts plays only for album and artist songs"),
+        _ => anyhow::bail!("Apple Music counts plays only for album and artist songs"),
     }
     Ok(PageMetadata {
         play_counts: counts,
@@ -556,7 +556,7 @@ pub async fn set_prerelease_saved(
     write_collection(http, &endpoint, &login.access_token, &client_token, body).await?;
     anyhow::ensure!(
         prerelease_saved(session, uri).await? == saved,
-        "Spotify has not confirmed the pre-save change. Open the link again to check."
+        "Apple Music has not confirmed the pre-save change. Open the link again to check."
     );
     Ok(())
 }
@@ -579,7 +579,7 @@ async fn write_collection(
         .map_err(reqwest::Error::without_url)?;
     anyhow::ensure!(
         response.status().is_success(),
-        "Spotify did not accept pre-save (HTTP {}). Open the link again to check.",
+        "Apple Music did not accept pre-save (HTTP {}). Open the link again to check.",
         response.status().as_u16()
     );
     Ok(())
@@ -622,7 +622,7 @@ pub async fn remove_playlist_rows(
         .await
         .map_err(|error| match error.kind {
             ErrorKind::Aborted => anyhow::anyhow!(CHANGED),
-            _ => anyhow::anyhow!("Spotify did not remove the song: {error}"),
+            _ => anyhow::anyhow!("Apple Music did not remove the song: {error}"),
         })?;
     Ok(SelectedListContent::parse_from_bytes(&bytes)
         .ok()
@@ -1008,7 +1008,7 @@ fn station_uris(
     context: &librespot_protocol::context::Context,
 ) -> anyhow::Result<Vec<SpotifyUri>> {
     let uris = station_songs(context);
-    anyhow::ensure!(!uris.is_empty(), "Spotify has no songs for this radio");
+    anyhow::ensure!(!uris.is_empty(), "Apple Music has no songs for this radio");
     Ok(seed_first(station, uris))
 }
 
@@ -2675,7 +2675,7 @@ mod tests {
             Some(format!("{IMAGE_HOST}{}", "ab".repeat(20)).as_str()),
             "the cover is on the image host at its stated size"
         );
-        assert_eq!(album.images[1].width, None, "a size Spotify left out");
+        assert_eq!(album.images[1].width, None, "a size Apple Music left out");
     }
 
     /// An episode brings its show and its date along.
@@ -3244,7 +3244,7 @@ mod tests {
     fn an_empty_station_remains_an_error_even_for_a_song_seed() {
         let station = format!("spotify:station:track:{STATION_SEED_ID}");
         let error = station_uris(&station, &station_context(&[])).unwrap_err();
-        assert_eq!(error.to_string(), "Spotify has no songs for this radio");
+        assert_eq!(error.to_string(), "Apple Music has no songs for this radio");
     }
 
     #[test]
@@ -3521,7 +3521,7 @@ mod tests {
         assert_eq!(daily.name, "Daily Mix 1");
         assert_eq!(daily.uri, "spotify:playlist:daily");
         assert_eq!(daily.owner.id.as_deref(), Some("spotify"));
-        assert_eq!(daily.owner_name(), "Spotify");
+        assert_eq!(daily.owner_name(), "Apple Music");
         assert_eq!(daily.public, Some(false));
         assert_eq!(daily.items_count, None, "no length given");
 

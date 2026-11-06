@@ -490,7 +490,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             soloist_enabled: false,
-            device_name: "Spotifast".to_string(),
+            device_name: "Applebum".to_string(),
             bitrate: 320,
             normalisation: false,
             autoplay: true,
@@ -540,12 +540,12 @@ impl Default for Settings {
             library_sort: std::collections::BTreeMap::new(),
             library_by_you: false,
             zoom: 1.0,
-            winamp_window: false,
+            // This app opens as the classic player.
+            winamp_window: true,
             winamp_show_taskbar: true,
             custom_titlebar: false,
-            // New installs open the mini player in our own wide skin; a file
-            // that says null keeps the classic one it chose.
-            skin: Some(crate::skin::WIDE.into()),
+            // `None` is the built-in classic Winamp skin.
+            skin: None,
             random_skin: false,
             skin_scale: None,
             winamp_on_top: false,
@@ -1219,7 +1219,7 @@ mod tests {
             })
         ));
         assert_eq!(paired.cached_palette(false), Some(latte));
-        assert_eq!(paired.cached_palette(true), None, "dark stays Spotifast's");
+        assert_eq!(paired.cached_palette(true), None, "dark stays Applebum's");
         let encoded = serde_json::to_string(&paired).unwrap();
         let decoded: Settings = serde_json::from_str(&encoded).unwrap();
         assert_eq!(decoded, paired);

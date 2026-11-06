@@ -98,7 +98,7 @@ pub fn prepare(bytes: &[u8]) -> Result<Cover, String> {
             }
         }
     }
-    Err("This image is too detailed for Spotify's upload limit. Choose a smaller image.".into())
+    Err("This image is too detailed for Apple Music's upload limit. Choose a smaller image.".into())
 }
 
 fn bounded_decode(bytes: &[u8]) -> Result<image::DynamicImage, String> {

@@ -583,7 +583,7 @@ impl Playlist {
             .display_name
             .as_deref()
             .or_else(|| self.owner.id.as_deref().filter(|id| *id != "spotify"))
-            .unwrap_or("Spotify")
+            .unwrap_or("Apple Music")
     }
 
     pub fn owned_by(&self, user_id: &str) -> bool {
@@ -1000,7 +1000,7 @@ mod tests {
         let mut told = Playlist {
             public: Some(false),
             owner: Owner {
-                display_name: Some("Spotify".into()),
+                display_name: Some("Apple Music".into()),
                 ..Default::default()
             },
             images: vec![Image {
@@ -1011,7 +1011,7 @@ mod tests {
         };
         told.fill_from(&listed);
         assert_eq!(told.public, Some(false));
-        assert_eq!(told.owner.display_name.as_deref(), Some("Spotify"));
+        assert_eq!(told.owner.display_name.as_deref(), Some("Apple Music"));
         assert_eq!(told.images[0].url, "cover");
     }
 
@@ -1027,8 +1027,8 @@ mod tests {
         };
         assert_eq!(named(Some("1263908142"), None).owner_name(), "1263908142");
         assert_eq!(named(Some("1263908142"), Some("mgc")).owner_name(), "mgc");
-        assert_eq!(named(Some("spotify"), None).owner_name(), "Spotify");
-        assert_eq!(named(None, None).owner_name(), "Spotify");
+        assert_eq!(named(Some("spotify"), None).owner_name(), "Apple Music");
+        assert_eq!(named(None, None).owner_name(), "Apple Music");
     }
 
     #[test]

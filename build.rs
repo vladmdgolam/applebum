@@ -45,6 +45,8 @@ fn glew_library(lib: &std::path::Path) -> Option<&'static str> {
 fn main() {
     #[cfg(feature = "soloist-native-audio")]
     native_soloist_audio();
+    #[cfg(feature = "apple-music")]
+    apple_music_bridge();
     fastframe_i18n::build::compile_catalogs("assets/i18n");
     #[cfg(windows)]
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
@@ -117,4 +119,36 @@ fn native_soloist_audio() {
         println!("cargo:rustc-link-lib=uuid");
     }
     build.compile("spotifast_soloist_audio");
+}
+
+/// Compiles the Swift bridge to MusicKit into a static library.
+#[cfg(feature = "apple-music")]
+fn apple_music_bridge() {
+    let source = "src/apple/native/Bridge.swift";
+    println!("cargo:rerun-if-changed={source}");
+    let out = std::env::var("OUT_DIR").expect("cargo sets OUT_DIR");
+    let library = format!("{out}/libambridge.a");
+    let status = std::process::Command::new("xcrun")
+        .args(["swiftc", "-parse-as-library", "-emit-library", "-static", "-O", "-swift-version", "5"])
+        .args(["-target", "arm64-apple-macos15.0", "-module-name", "AMBridge", "-o", &library, source])
+        .status()
+        .expect("swiftc runs through xcrun");
+    assert!(status.success(), "the Swift bridge didn't compile");
+    println!("cargo:rustc-link-search=native={out}");
+    println!("cargo:rustc-link-lib=static=ambridge");
+    for framework in ["Foundation", "MusicKit", "CoreAudio", "AudioToolbox"] {
+        println!("cargo:rustc-link-lib=framework={framework}");
+    }
+    let toolchain = std::process::Command::new("xcrun")
+        .args(["--toolchain", "default", "--find", "swiftc"])
+        .output()
+        .expect("xcrun finds swiftc");
+    let swiftc = String::from_utf8_lossy(&toolchain.stdout);
+    if let Some(bin) = std::path::Path::new(swiftc.trim()).parent()
+        && let Some(usr) = bin.parent()
+    {
+        println!("cargo:rustc-link-search=native={}", usr.join("lib/swift/macosx").display());
+    }
+    println!("cargo:rustc-link-search=native=/usr/lib/swift");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
 }

@@ -101,7 +101,7 @@ fn recent(app: &mut App, ui: &mut egui::Ui) {
             ui,
             &palette,
             Icon::Search,
-            &gettext(app.locale, "Search Spotify"),
+            &gettext(app.locale, "Search Apple Music"),
             &gettext(
                 app.locale,
                 "Find songs, artists, albums, playlists, and podcasts.",

@@ -187,7 +187,7 @@ impl MadeForYou {
         if let Some(wait) = longest_wait([&made_for_you, &top_mixes]) {
             state.cooldown = Some((Instant::now(), wait));
             log::warn!(
-                "Spotify rate limit source=session-home wait={}s",
+                "Apple Music rate limit source=session-home wait={}s",
                 wait.as_secs()
             );
         }
@@ -196,7 +196,7 @@ impl MadeForYou {
             top_mixes: top_mixes.map_err(SectionError::into_api),
         };
         state.cached = Some((Instant::now(), shelves.clone()));
-        log::debug!("Spotify route operation=MadeForYou source=session");
+        log::debug!("Apple Music route operation=MadeForYou source=session");
         Ok(shelves)
     }
 }
@@ -241,7 +241,7 @@ async fn read_section(request: &Request<'_>, section: &str) -> Result<Vec<Playli
         if !status.is_success() {
             return Err(ApiError::Status {
                 status: status.as_u16(),
-                message: "Spotify couldn't load Made for you through the playback session. Try again later.".into(),
+                message: "Apple Music couldn't load Made for you through the playback session. Try again later.".into(),
             }
             .into());
         }
@@ -279,7 +279,7 @@ fn session_error() -> ApiError {
 
 /// Reports a missing or incompatible private Home response.
 fn response_error() -> ApiError {
-    ApiError::Decode("Made for you is unavailable in Spotify's response. Try again later.".into())
+    ApiError::Decode("Made for you is unavailable in Apple Music's response. Try again later.".into())
 }
 
 /// Builds one page of Spotify's persisted Home section query.
@@ -435,7 +435,7 @@ mod tests {
     #[test]
     fn reads_personalized_cards_without_english_name_or_owner_filters() {
         let result = parse_page(shelf(json!([
-            {"content":{"data":{"__typename":"Playlist","uri":"spotify:playlist:1234567890123456789012","name":"Découvertes de la semaine","ownerV2":{"data":{"uri":"spotify:user:spotify","name":"Spotify"}},"images":{"items":[{"sources":[{"url":"https://i.scdn.co/image/a","width":300}]}]}}}},
+            {"content":{"data":{"__typename":"Playlist","uri":"spotify:playlist:1234567890123456789012","name":"Découvertes de la semaine","ownerV2":{"data":{"uri":"spotify:user:spotify","name":"Apple Music"}},"images":{"items":[{"sources":[{"url":"https://i.scdn.co/image/a","width":300}]}]}}}},
             {"content":{"data":{"__typename":"Playlist","uri":"spotify:playlist:2234567890123456789012","name":"Your evening mix"}}},
             {"content":{"data":{"__typename":"NotFound"}}},
             {"content":null}

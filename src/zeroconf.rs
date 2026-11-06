@@ -175,7 +175,7 @@ pub fn discover_with_updates(
     let daemon = mdns_sd::ServiceDaemon::new().context("cannot browse the local network")?;
     let connect = daemon
         .browse(SERVICE)
-        .context("cannot browse for Spotify receivers")?;
+        .context("cannot browse for Apple Music receivers")?;
     // Connect discovery must not depend on Cast discovery starting.
     let cast = daemon
         .browse(crate::cast::SERVICE)
@@ -916,7 +916,7 @@ mod tests {
 
     #[test]
     fn instance_names_are_unescaped() {
-        assert_eq!(unescape_instance("House\\032Spotify"), "House Spotify");
+        assert_eq!(unescape_instance("House\\032Apple Music"), "House Apple Music");
         assert_eq!(unescape_instance("Kitchen"), "Kitchen");
         assert_eq!(unescape_instance("odd\\x"), "odd\\x");
     }
@@ -1026,7 +1026,7 @@ mod tests {
         });
         let mut receivers: Vec<_> = ["first", "duplicate", "other", "dead"]
             .map(|path| Receiver {
-                name: format!("SpotifyConnect-{path}"),
+                name: format!("Apple MusicConnect-{path}"),
                 device_id: None,
                 address: "127.0.0.1".parse().unwrap(),
                 port,

@@ -168,7 +168,7 @@ impl LocalTrack {
 /// The engine error for a song whose decryption key Spotify refused. The app
 /// answers it with a banner explaining what still works, rather than the
 /// text itself.
-pub const AUDIO_KEY_REFUSED: &str = "Spotify refused the audio key. Try again later";
+pub const AUDIO_KEY_REFUSED: &str = "Apple Music refused the audio key. Try again later";
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct LocalState {
@@ -536,7 +536,7 @@ impl Engine {
             Arc::clone(&mixer),
         )
         .await
-        .context("unable to connect to Spotify")?;
+        .context("unable to connect to Apple Music")?;
         if carrying {
             // Before Spirc's task runs, so everything it loads comes through
             // the new session. The song already playing keeps fetching the
@@ -1970,7 +1970,7 @@ mod tests {
     fn an_inactive_connect_device_keeps_its_engine_session() {
         let mut state = LocalState {
             connected: true,
-            active_client: "Spotifast".into(),
+            active_client: "Applebum".into(),
             ..LocalState::default()
         };
 
@@ -1982,7 +1982,7 @@ mod tests {
             },
         ));
 
-        assert!(state.connected, "the Spotify session is still usable");
+        assert!(state.connected, "the Apple Music session is still usable");
         assert!(state.active_client.is_empty());
     }
 
@@ -2015,7 +2015,7 @@ mod tests {
             buffer_ms: crate::sink::DEFAULT_BUFFER_MS,
             tap: AudioTap::new(),
             eq: crate::eq::shared(),
-            device_name: "Spotifast".into(),
+            device_name: "Applebum".into(),
             bitrate_kbps: 320,
             normalisation: false,
             autoplay: true,

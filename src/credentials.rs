@@ -19,7 +19,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{auth::StoredToken, paths::AppDirs};
 
-const SERVICE: &str = "rocks.spotifast.Spotifast";
+const SERVICE: &str = "rocks.spotifast.Applebum";
 const TIMEOUT: Duration = Duration::from_secs(20);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -129,7 +129,7 @@ pub enum Error {
     Locked,
     #[error("The system credential store did not respond. This sign-in cannot be remembered yet.")]
     Timeout,
-    #[error("The stored Spotify grant is invalid. Sign in again.")]
+    #[error("The stored Apple Music grant is invalid. Sign in again.")]
     Invalid,
     #[error(
         "Unable to update credential-storage state. Check the application state directory's permissions."

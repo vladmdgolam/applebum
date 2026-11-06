@@ -517,7 +517,7 @@ pub fn popup(app: &mut App, ctx: &egui::Context) {
                                 &palette,
                                 &gettext(
                                     locale,
-                                    "No devices found. Open Spotify on another device, then refresh.",
+                                    "No devices found. Open Apple Music on another device, then refresh.",
                                 ),
                             );
                             ui.add_space(8.0);
@@ -711,7 +711,7 @@ mod tests {
     #[test]
     fn a_receivers_identity_matches_even_when_its_advertised_name_differs() {
         let receiver = crate::zeroconf::Receiver {
-            name: "SpotifyConnect".into(),
+            name: "Apple MusicConnect".into(),
             device_id: Some("living-room".into()),
             address: "127.0.0.1".parse().unwrap(),
             port: 80,

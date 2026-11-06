@@ -426,7 +426,7 @@ pub(super) fn spotify_access_control(app: &mut App, ui: &mut egui::Ui) {
             true,
             None,
         ),
-        LocalPlayback::Connecting => (gettext(locale, "Connecting to Spotify…"), true, None),
+        LocalPlayback::Connecting => (gettext(locale, "Connecting to Apple Music…"), true, None),
         LocalPlayback::WaitingForNetwork => (gettext(locale, "Waiting for network…"), true, None),
         LocalPlayback::Unavailable => ("".into(), false, Some(gettext(locale, "Authorize"))),
         LocalPlayback::Failed(_) => ("".into(), false, Some(gettext(locale, "Try again"))),
@@ -498,7 +498,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         .unwrap_or(false);
     let mut changed = false;
     let mut any_visible = false;
-    let soloist = gettext(locale, "Spotify Soloist");
+    let soloist = gettext(locale, "Apple Music Soloist");
     let soloist_rows = super::soloist::rows(app);
     let soloist_keywords = row_matches(
         &needle,
@@ -534,29 +534,29 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
     let sign_out = gettext(locale, "Sign out");
     let account_rows = [
         RowText::new(
-            gettext(locale, "Spotify registration"),
+            gettext(locale, "Apple Music registration"),
             if app.shared_grant && !in_use {
                 gettext(
                     locale,
-                    "You're still on the shared sign-in Spotifast used before, which Spotify can stop accepting at any time. Register Spotifast to keep listening.",
+                    "You're still on the shared sign-in Applebum used before, which Apple Music can stop accepting at any time. Register Applebum to keep listening.",
                 )
             } else {
                 gettext(
                     locale,
-                    "Spotifast connects with the Client ID you registered with Spotify.",
+                    "Applebum connects with the Client ID you registered with Apple Music.",
                 )
             },
         ),
         RowText::new(
-            gettext(locale, "Register Spotifast"),
+            gettext(locale, "Register Applebum"),
             gettext(
                 locale,
-                "It takes about two minutes in Spotify's developer dashboard.",
+                "It takes about two minutes in Apple Music's developer dashboard.",
             ),
         )
         .when(!in_use),
         RowText::new(
-            gettext(locale, "Spotifast registered"),
+            gettext(locale, "Applebum registered"),
             if app.shared_grant {
                 gettext(
                     locale,
@@ -565,7 +565,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             } else {
                 gettext(
                     locale,
-                    "Spotifast uses your Client ID for Spotify's Web API.",
+                    "Applebum uses your Client ID for Apple Music's Web API.",
                 )
             },
         )
@@ -574,7 +574,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             gettext(locale, "Authorize your Client ID"),
             gettext(
                 locale,
-                "Spotify opens in your browser to verify the account.",
+                "Apple Music opens in your browser to verify the account.",
             ),
         )
         .when(!in_use && wanted.is_some()),
@@ -602,9 +602,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                             .as_ref()
                             .and_then(|user| user.product.clone())
                             .map(|product| match product.as_str() {
-                                "premium" => "Spotify Premium".to_string(),
+                                "premium" => "Apple Music Premium".to_string(),
                                 "free" | "open" => {
-                                    gettext(locale, "Spotify Free, local playback needs Premium")
+                                    gettext(locale, "Apple Music Free, local playback needs Premium")
                                         .into_owned()
                                 }
                                 other => other.to_string(),
@@ -704,7 +704,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
     let (status, detail, action) = match &app.local_playback {
         crate::backend::LocalPlayback::Ready { .. } => (
             pgettext(locale, "playback status", "Ready"),
-            gettext(locale, "This computer is a Spotify Connect device."),
+            gettext(locale, "This computer is a Apple Music Connect device."),
             None,
         ),
         crate::backend::LocalPlayback::Authorizing => (
@@ -714,7 +714,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         ),
         crate::backend::LocalPlayback::Connecting => (
             pgettext(locale, "playback status", "Connecting"),
-            gettext(locale, "Connecting to Spotify…"),
+            gettext(locale, "Connecting to Apple Music…"),
             None,
         ),
         crate::backend::LocalPlayback::WaitingForNetwork => (
@@ -734,7 +734,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             pgettext(locale, "playback status", "Not set up"),
             gettext(
                 locale,
-                "Requires Spotify Premium and a one-time browser sign-in.",
+                "Requires Apple Music Premium and a one-time browser sign-in.",
             ),
             Some(gettext(locale, "Enable playback here")),
         ),
@@ -776,7 +776,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         ),
         RowText::new(
             gettext(locale, "Device name"),
-            gettext(locale, "How this computer appears in Spotify Connect."),
+            gettext(locale, "How this computer appears in Apple Music Connect."),
         ),
         RowText::new(
             gettext(locale, "Audio quality"),
@@ -799,12 +799,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             super::keys::platform_shortcut(
                 &gettext(
                     locale,
-                    "Spotifast hides to the system tray. Quit from the tray menu or with Ctrl+Q.",
+                    "Applebum hides to the system tray. Quit from the tray menu or with Ctrl+Q.",
                 ),
                 // macOS has a menu bar where the others have a tray (#1006).
                 &gettext(
                     locale,
-                    "Spotifast hides to the menu bar. Quit from its menu-bar icon or with Cmd+Q.",
+                    "Applebum hides to the menu bar. Quit from its menu-bar icon or with Cmd+Q.",
                 ),
             )
             .to_owned(),
@@ -847,7 +847,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             show_in_dock.clone(),
             gettext(
                 locale,
-                "When off, Spotifast lives in the menu bar and leaves Cmd+Tab. Open it from its menu-bar icon.",
+                "When off, Applebum lives in the menu bar and leaves Cmd+Tab. Open it from its menu-bar icon.",
             ),
         )
         .when(cfg!(target_os = "macos")),
@@ -1332,7 +1332,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             custom_titlebar.clone(),
             gettext(
                 locale,
-                "Draw Spotifast's own title bar and window buttons instead of the desktop's.",
+                "Draw Applebum's own title bar and window buttons instead of the desktop's.",
             ),
         )
         .when(show_custom_titlebar),
@@ -1938,7 +1938,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                         .collect();
                     let mut cards = vec![Card {
                         key: BUILT_IN,
-                        label: "Spotifast",
+                        label: "Applebum",
                     }];
                     cards.extend(kept.iter().map(|index| Card {
                         key: &choices[*index].name,
@@ -2110,20 +2110,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 0 => gettext(
                     locale,
                     // Translators: {folder} is the path of the MilkDrop presets folder.
-                    "None yet in {folder}. Add .milk files here. Spotifast downloads presets when MilkDrop first opens with an empty folder.",
+                    "None yet in {folder}. Add .milk files here. Applebum downloads presets when MilkDrop first opens with an empty folder.",
                 )
                 .replace("{folder}", &folder),
                 1 => gettext(
                     locale,
                     // Translators: {folder} is the path of the MilkDrop presets folder.
-                    "One preset in {folder}. Add .milk files here. Spotifast downloads presets when MilkDrop first opens with an empty folder.",
+                    "One preset in {folder}. Add .milk files here. Applebum downloads presets when MilkDrop first opens with an empty folder.",
                 )
                 .replace("{folder}", &folder),
                 n => ngettext(
                     locale,
                     // Translators: {count} is the number of presets, {folder} the path of the MilkDrop presets folder.
-                    "{count} preset in {folder}. Add .milk files here. Spotifast downloads presets when MilkDrop first opens with an empty folder.",
-                    "{count} presets in {folder}. Add .milk files here. Spotifast downloads presets when MilkDrop first opens with an empty folder.",
+                    "{count} preset in {folder}. Add .milk files here. Applebum downloads presets when MilkDrop first opens with an empty folder.",
+                    "{count} presets in {folder}. Add .milk files here. Applebum downloads presets when MilkDrop first opens with an empty folder.",
                     u32::try_from(n).unwrap_or(u32::MAX),
                 )
                 .replace("{count}", &n.to_string())
@@ -2482,7 +2482,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
     let about = gettext(locale, "About");
     let built_with = gettext(
         locale,
-        "Built with Rust, egui, and librespot. Not affiliated with Spotify.",
+        "Built with Rust, egui, and librespot. Not affiliated with Apple Music.",
     );
     let check_for_updates = gettext(locale, "Check for updates");
     let checking = gettext(locale, "Checking…");
@@ -2491,7 +2491,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
     let source_code = gettext(locale, "Source code");
     let about_rows = [
         RowText::new(
-            format!("Spotifast {}", env!("CARGO_PKG_VERSION")),
+            format!("Applebum {}", env!("CARGO_PKG_VERSION")),
             built_with.clone(),
         ),
         RowText::new(
@@ -2508,7 +2508,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 ui.vertical(|ui| {
                     theme::text(
                         ui,
-                        format!("Spotifast {}", env!("CARGO_PKG_VERSION")),
+                        format!("Applebum {}", env!("CARGO_PKG_VERSION")),
                         theme::semibold(15.0),
                         palette.text,
                     );
@@ -2620,7 +2620,7 @@ fn start_with_computer_detail(
     if matches!(state, Some(State::NeedsApproval(_))) && choice.is_some() {
         gettext(
             locale,
-            "Allow Spotifast in System Settings, General, Login Items.",
+            "Allow Applebum in System Settings, General, Login Items.",
         )
     } else if choice == Some(Start::Hidden) && !keeps_running {
         if cfg!(target_os = "macos") {
@@ -2637,12 +2637,12 @@ fn start_with_computer_detail(
     } else if cfg!(target_os = "macos") {
         gettext(
             locale,
-            "Open Spotifast when you log in, with its window or in the menu bar.",
+            "Open Applebum when you log in, with its window or in the menu bar.",
         )
     } else {
         gettext(
             locale,
-            "Open Spotifast when you log in, with its window or in the tray.",
+            "Open Applebum when you log in, with its window or in the tray.",
         )
     }
 }
@@ -3067,7 +3067,7 @@ mod tests {
         assert!(section_matches(
             "",
             "Playback on this computer",
-            &[RowText::new("Status", "Spotify")]
+            &[RowText::new("Status", "Apple Music")]
         ));
     }
 

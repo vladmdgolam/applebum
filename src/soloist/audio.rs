@@ -1630,7 +1630,7 @@ mod pipewire {
                 "media.type" => "Audio", "media.category" => "Capture", "media.role" => "Music",
                 // Soloist only selects sink devices, not capture streams.
                 "media.class" => "Audio/Sink", "node.name" => name,
-                "node.description" => "Spotifast Soloist processing", "node.virtual" => "true",
+                "node.description" => "Applebum Soloist processing", "node.virtual" => "true",
                 "priority.session" => "0", "node.link-group" => name, "node.group" => name,
                 // Exclude this sink from automatic/default device selection.
                 // Its unique target is our output stream, not a speaker or

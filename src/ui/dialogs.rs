@@ -41,13 +41,13 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                 // Drawn by cover_art above.
                 Dialog::CoverArt { .. } => {}
                 Dialog::PersonalAppIntro => {
-                    theme::text(ui, gettext(locale, "Register Spotifast with Spotify"), theme::bold(20.0), palette.text);
+                    theme::text(ui, gettext(locale, "Register Applebum with Apple Music"), theme::bold(20.0), palette.text);
                     ui.add_space(12.0);
-                    ui.add(egui::Label::new(egui::RichText::new(gettext(locale, "You're on the shared sign-in Spotifast used before. Spotifast no longer offers it, and Spotify can stop accepting it at any time. Register Spotifast so nothing stops your music. It takes about two minutes.")).font(theme::regular(14.0)).color(palette.secondary)).wrap());
+                    ui.add(egui::Label::new(egui::RichText::new(gettext(locale, "You're on the shared sign-in Applebum used before. Applebum no longer offers it, and Apple Music can stop accepting it at any time. Register Applebum so nothing stops your music. It takes about two minutes.")).font(theme::regular(14.0)).color(palette.secondary)).wrap());
                     ui.add_space(10.0);
                     ui.add_space(8.0);
                     buttons(ui, |ui| {
-                        if theme::pill_button(ui, &palette, &gettext(locale, "Register Spotifast"), true).clicked() {
+                        if theme::pill_button(ui, &palette, &gettext(locale, "Register Applebum"), true).clicked() {
                             app.actions.push(Action::OpenPersonalAppSetup);
                         }
                         if theme::pill_button(ui, &palette, &gettext(locale, "Not now"), false).clicked() {
@@ -71,7 +71,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                     ui.add_space(8.0);
                     let body = if owned {
                         // Translators: {name} is a playlist name.
-                        gettext(locale, "Delete “{name}”? You can recover it from Spotify for 90 days.")
+                        gettext(locale, "Delete “{name}”? You can recover it from Apple Music for 90 days.")
                     } else {
                         // Translators: {name} is a playlist name.
                         gettext(locale, "“{name}” will no longer appear in Your Library.")
@@ -210,7 +210,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                         egui::Label::new(
                             egui::RichText::new(gettext(
                                 locale,
-                                "Playback needs Spotify Premium. Free accounts can browse and search, but cannot play music through Spotifast.",
+                                "Playback needs Apple Music Premium. Free accounts can browse and search, but cannot play music through Applebum.",
                             ))
                             .font(theme::regular(14.0))
                             .color(palette.secondary),
