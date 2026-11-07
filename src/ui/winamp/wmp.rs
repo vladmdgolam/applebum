@@ -141,6 +141,127 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         );
     }
     app.winamp.runtime = Some(runtime);
+    if app.skin_lyrics_shown() {
+        lyrics_strip(app, &ctx);
+    }
+}
+
+/// Headspace's own greens: the lit lime of its frame, the shadow along its
+/// edge, the dark screen of its drawers, and its playlist's two text colours.
+const STRIP_LIME: egui::Color32 = egui::Color32::from_rgb(0xaa, 0xff, 0x2b);
+const STRIP_MID: egui::Color32 = egui::Color32::from_rgb(0x63, 0xac, 0x05);
+const STRIP_EDGE: egui::Color32 = egui::Color32::from_rgb(0x1d, 0x7c, 0x00);
+const STRIP_SCREEN: egui::Color32 = egui::Color32::from_rgb(0x28, 0x5f, 0x03);
+const STRIP_SUNG: egui::Color32 = egui::Color32::from_rgb(0x00, 0xff, 0x00);
+const STRIP_TEXT: egui::Color32 = egui::Color32::from_rgb(0xc9, 0xd7, 0xbf);
+
+/// The line being sung and its neighbours, in a strip that hangs under the
+/// skin's window and follows it.
+fn lyrics_strip(app: &mut App, ctx: &egui::Context) {
+    let Some(player) = ctx.input(|input| input.viewport().outer_rect) else {
+        return;
+    };
+    let width = (player.width() * 0.62).clamp(260.0, 520.0);
+    let size = vec2(width, 112.0);
+    let place = egui::pos2(player.center().x - width / 2.0, player.max.y + 6.0);
+    let builder = ViewportBuilder::default()
+        .with_title("Lyrics")
+        .with_decorations(false)
+        .with_transparent(true)
+        .with_resizable(false)
+        .with_inner_size(size)
+        .with_position(place)
+        .with_taskbar(false);
+    ctx.show_viewport_immediate(ViewportId::from_hash_of("applebum-lyrics-strip"), builder, |ui, _class| {
+        let ctx = ui.ctx().clone();
+        // Keep hanging under the player wherever it goes.
+        if let Some(now) = ctx.input(|input| input.viewport().outer_rect)
+            && (now.min - place).length() > 1.0
+        {
+            ctx.send_viewport_cmd(ViewportCommand::OuterPosition(place));
+        }
+        let rect = ui.max_rect();
+        let painter = ui.painter();
+        painter.rect_filled(rect, 18.0, STRIP_EDGE);
+        painter.rect_filled(rect.shrink(2.0), 16.0, STRIP_MID);
+        painter.rect_filled(
+            Rect::from_min_max(rect.min + vec2(4.0, 3.0), egui::pos2(rect.max.x - 4.0, rect.min.y + 10.0)),
+            8.0,
+            STRIP_LIME.gamma_multiply(0.55),
+        );
+        let screen = rect.shrink2(vec2(11.0, 9.0));
+        painter.rect_filled(screen, 10.0, STRIP_SCREEN);
+        let clip = painter.with_clip_rect(screen.shrink(2.0));
+        draw_strip_lines(app, &ctx, &clip, screen);
+    });
+}
+
+fn draw_strip_lines(app: &App, ctx: &egui::Context, painter: &egui::Painter, screen: Rect) {
+    let center = screen.center();
+    let say = |text: &str| {
+        painter.text(center, egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(13.0), STRIP_TEXT);
+    };
+    let Some(now) = app.now_playing() else {
+        say("\u{266a}");
+        return;
+    };
+    let lyrics = match &app.lyrics {
+        crate::model::Loadable::Loaded(Some(lyrics)) if !lyrics.lines.is_empty() => lyrics,
+        crate::model::Loadable::Loaded(Some(lyrics)) if lyrics.instrumental => {
+            say("Instrumental");
+            return;
+        }
+        crate::model::Loadable::Loaded(_) => {
+            say("No lyrics for this song");
+            return;
+        }
+        crate::model::Loadable::Failed(_) => {
+            say("Couldn't fetch the lyrics");
+            return;
+        }
+        _ => {
+            say("\u{2026}");
+            return;
+        }
+    };
+    let spacing = 24.0;
+    // Untimed lyrics just show their start; timed ones glide to the line sung.
+    let active = if lyrics.synced { lyrics.active_line(now.position_ms) } else { None };
+    let target = active.map_or(-0.6, |line| line as f32);
+    let shown = ctx.animate_value_with_time(egui::Id::new("strip-line"), target, 0.28);
+    if (shown - target).abs() > 0.001 {
+        ctx.request_repaint();
+    }
+    let fit = screen.width() - 24.0;
+    for (index, line) in lyrics.lines.iter().enumerate() {
+        let y = center.y + (index as f32 - shown) * spacing;
+        if y < screen.min.y - spacing || y > screen.max.y + spacing {
+            continue;
+        }
+        let sung = active == Some(index);
+        let distance = ((index as f32 - shown).abs() / 2.2).min(1.0);
+        let (font, color) = if sung {
+            (egui::FontId::proportional(16.0), STRIP_SUNG)
+        } else {
+            (egui::FontId::proportional(13.0), STRIP_TEXT.gamma_multiply(1.0 - distance * 0.65))
+        };
+        let text = if line.text.is_empty() { "\u{266a}" } else { line.text.as_str() };
+        let galley = painter.layout(text.to_owned(), font, color, f32::INFINITY);
+        // A long line shrinks to fit rather than running off the screen.
+        let scale = (fit / galley.size().x).min(1.0);
+        let galley = if scale < 1.0 {
+            let font = egui::FontId::proportional(if sung { 16.0 } else { 13.0 } * scale.max(0.6));
+            painter.layout(text.to_owned(), font, color, fit)
+        } else {
+            galley
+        };
+        let at = egui::pos2(center.x - galley.size().x / 2.0, y - galley.size().y / 2.0);
+        painter.galley(at, galley, color);
+    }
+    // The next line is never more than a beat away: keep the clock moving.
+    if lyrics.synced && now.playing {
+        ctx.request_repaint_after(std::time::Duration::from_millis(100));
+    }
 }
 
 fn draw_view(app: &mut App, runtime: &mut Runtime, ui: &mut Ui, key: u32, primary: bool) {

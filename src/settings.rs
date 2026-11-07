@@ -401,6 +401,8 @@ pub struct Settings {
     /// The library playlist waiting in the player at launch, by name. Without
     /// one, the last song played.
     pub startup_playlist: Option<String>,
+    /// A strip of synced lyrics under a Windows Media Player skin.
+    pub skin_lyrics: bool,
     /// The Winamp window stays above other windows.
     pub winamp_on_top: bool,
     /// The mini player's visualiser: bars, scope, or off.
@@ -556,6 +558,7 @@ impl Default for Settings {
             skin_scale: None,
             skin_zoom: 1.0,
             startup_playlist: None,
+            skin_lyrics: false,
             winamp_on_top: false,
             vis: VisMode::default(),
             playlist_open: false,

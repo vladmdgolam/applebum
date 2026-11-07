@@ -1429,6 +1429,8 @@ pub enum Action {
     SetSkinScale(u8),
     /// The player's size from the View menu, eased to rather than jumped to.
     SetSkinZoom(f32),
+    /// Show or hide the lyrics strip under a Windows Media Player skin.
+    ToggleSkinLyrics,
     ToggleWinampOnTop,
     SetWinampTaskbar(bool),
     /// Windows: draw Spotifast's own title bar instead of the standard one.

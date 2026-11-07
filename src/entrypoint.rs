@@ -1361,6 +1361,7 @@ impl Shell {
                 MenuCommand::SkinLarger => Action::SetSkinZoom(app.settings.skin_zoom * 1.15),
                 MenuCommand::SkinSmaller => Action::SetSkinZoom(app.settings.skin_zoom / 1.15),
                 MenuCommand::SkinActualSize => Action::SetSkinZoom(1.0),
+                MenuCommand::SkinLyrics => Action::ToggleSkinLyrics,
                 MenuCommand::Output(row) => {
                     let Some(id) = app.output_id(row) else {
                         continue;

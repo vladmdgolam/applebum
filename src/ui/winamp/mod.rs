@@ -781,6 +781,12 @@ fn options_menu(app: &mut App, ui: &mut Ui, unit: f32) {
             app.actions.push(Action::ToggleWinampOnTop);
         }
     });
+    if app.winamp.skin.wmp.is_some() {
+        let mut lyrics = app.settings.skin_lyrics;
+        if ui.checkbox(&mut lyrics, "Lyrics panel").clicked() {
+            app.actions.push(Action::ToggleSkinLyrics);
+        }
+    }
     if app.taskbar_setting_visible() {
         let mut visible = app.settings.winamp_show_taskbar;
         if ui

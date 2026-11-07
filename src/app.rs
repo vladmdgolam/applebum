@@ -3509,7 +3509,7 @@ impl App {
                         }
                         if matches!(self.lyrics, Loadable::Loaded(None) | Loadable::Failed(_)) {
                             self.lyrics = Loadable::NotLoaded;
-                            if self.show_lyrics_panel || self.lyrics_fullscreen.is_some() {
+                            if self.show_lyrics_panel || self.lyrics_fullscreen.is_some() || self.skin_lyrics_shown() {
                                 self.request_lyrics();
                             }
                         }
@@ -4366,7 +4366,7 @@ impl App {
         {
             self.refresh_queue(true);
         }
-        if self.show_lyrics_panel || self.lyrics_fullscreen.is_some() {
+        if self.show_lyrics_panel || self.lyrics_fullscreen.is_some() || self.skin_lyrics_shown() {
             // Fullscreen shows lyrics without the panel flag when the
             // queue column is open; a track change must refresh them.
             self.request_lyrics();
@@ -7306,6 +7306,7 @@ impl App {
     /// Moves the player's size toward the one chosen, the way the Dock resizes:
     /// a fixed share of the way each moment, so it settles rather than stops.
     fn ease_skin_zoom(&mut self, ctx: &egui::Context) {
+        crate::mac_menu::set_skin_lyrics(self.settings.skin_lyrics);
         let target = self.settings.skin_zoom;
         if target != self.skin_zoom_in_menu {
             crate::mac_menu::set_skin_zoom(target);
@@ -7321,6 +7322,11 @@ impl App {
             self.skin_zoom_shown = target;
         }
         ctx.request_repaint();
+    }
+
+    /// The lyrics strip is on and has a skin window to sit under.
+    pub fn skin_lyrics_shown(&self) -> bool {
+        self.settings.skin_lyrics && self.settings.winamp_window && self.winamp.skin.wmp.is_some()
     }
 
     /// The output in this row of the Output menu.
@@ -13916,6 +13922,13 @@ impl App {
             }
             Action::InstallSkin(path) => {
                 self.winamp.install(path, &self.dirs.skins_dir(), ctx);
+            }
+            Action::ToggleSkinLyrics => {
+                self.settings.skin_lyrics = !self.settings.skin_lyrics;
+                self.settings_dirty = true;
+                if self.settings.skin_lyrics {
+                    self.request_lyrics();
+                }
             }
             Action::SetSkinZoom(zoom) => {
                 self.settings.skin_zoom = zoom.clamp(SKIN_ZOOM_MIN, SKIN_ZOOM_MAX);

@@ -35,6 +35,7 @@ pub enum MenuCommand {
     SkinLarger,
     SkinSmaller,
     SkinActualSize,
+    SkinLyrics,
 }
 
 /// The Dock menu's first item, which names what a click will do.
@@ -66,6 +67,9 @@ pub fn set_outputs(_outputs: &[(String, bool)]) {}
 
 #[cfg(not(target_os = "macos"))]
 pub fn set_skin_zoom(_zoom: f32) {}
+
+#[cfg(not(target_os = "macos"))]
+pub fn set_skin_lyrics(_on: bool) {}
 
 #[cfg(target_os = "macos")]
 pub use mac_impl::*;
@@ -99,6 +103,8 @@ mod mac_impl {
         static OUTPUT_MENU: OnceCell<Retained<NSMenu>> = const { OnceCell::new() };
         /// The View menu's size slider, kept in step with the keyboard items.
         static SIZE_SLIDER: OnceCell<Retained<NSObject>> = const { OnceCell::new() };
+        /// The View menu's Lyrics Panel item, checked while the strip is on.
+        static LYRICS_ITEM: OnceCell<Retained<NSMenuItem>> = const { OnceCell::new() };
     }
 
     pub fn set_waker(wake: impl Fn() + Send + Sync + 'static) {
@@ -153,6 +159,16 @@ mod mac_impl {
         PLAYING.store(playing, Ordering::Relaxed);
     }
 
+    /// Checks or unchecks the Lyrics Panel item.
+    pub fn set_skin_lyrics(on: bool) {
+        LYRICS_ITEM.with(|item| {
+            if let Some(item) = item.get() {
+                let state: isize = if on { 1 } else { 0 };
+                let () = unsafe { msg_send![&**item, setState: state] };
+            }
+        });
+    }
+
     /// Moves the size slider to the size chosen some other way.
     pub fn set_skin_zoom(zoom: f32) {
         SIZE_SLIDER.with(|slider| {
@@ -193,6 +209,11 @@ mod mac_impl {
                 });
             }
         }
+        let lyrics = create_item(mtm, ns_string!("Lyrics Panel"), Some(sel!(skinLyrics:)), ns_string!("l"), Some(NSEventModifierFlags::Command | NSEventModifierFlags::Option), target);
+        menu.addItem(&lyrics);
+        LYRICS_ITEM.with(|cell| {
+            let _ = cell.set(lyrics);
+        });
         let keys = NSEventModifierFlags::Command | NSEventModifierFlags::Option;
         menu.addItem(&create_item(mtm, ns_string!("Larger"), Some(sel!(skinLarger:)), ns_string!("="), Some(keys), target));
         menu.addItem(&create_item(mtm, ns_string!("Smaller"), Some(sel!(skinSmaller:)), ns_string!("-"), Some(keys), target));
@@ -373,6 +394,11 @@ mod mac_impl {
             fn skin_size_changed(&self, sender: &NSObject) {
                 let value: f64 = unsafe { msg_send![sender, doubleValue] };
                 push_command(MenuCommand::SkinSize((value * 100.0).round() as u16));
+            }
+
+            #[unsafe(method(skinLyrics:))]
+            fn skin_lyrics(&self, _sender: &NSObject) {
+                push_command(MenuCommand::SkinLyrics);
             }
 
             #[unsafe(method(skinLarger:))]
