@@ -913,7 +913,7 @@ impl Runtime {
             self.drag_to(index, id, x, y);
             return;
         }
-        let target = paint::hit(&self.views[index].state, &mut self.images, x, y);
+        let target = paint::hit(&self.views[index].state, &mut self.images, &*self.shared.measure, x, y);
         self.hover(index, target);
         if let Some(target) = target
             && self.views[index].state.elements[target].enabled
@@ -965,7 +965,7 @@ impl Runtime {
         self.shared.event.button = if secondary { 2.0 } else { 1.0 };
         let (x, y) = self.views[index].state.pointer;
         let (x, y) = (f64::from(x), f64::from(y));
-        let target = paint::hit(&self.views[index].state, &mut self.images, x, y);
+        let target = paint::hit(&self.views[index].state, &mut self.images, &*self.shared.measure, x, y);
         self.hover(index, target);
         // A click anywhere away from an open popup closes it.
         for id in 0..self.views[index].state.elements.len() {
@@ -1061,6 +1061,7 @@ impl Runtime {
         let target = paint::hit(
             &self.views[index].state,
             &mut self.images,
+            &*self.shared.measure,
             f64::from(x),
             f64::from(y),
         );

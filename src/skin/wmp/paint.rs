@@ -1413,7 +1413,13 @@ pub fn list_row_at(view: &ViewState, id: ElementId, y: f64) -> usize {
 /// What is under a skin pixel, in the order things are drawn over each
 /// other. Sliders with no thumb, `passThrough`, and hidden things are not
 /// there; see-through parts of pictures with no job are not either.
-pub fn hit(view: &ViewState, images: &mut Images, x: f64, y: f64) -> Option<ElementId> {
+pub fn hit(
+    view: &ViewState,
+    images: &mut Images,
+    measure: &Measure,
+    x: f64,
+    y: f64,
+) -> Option<ElementId> {
     for id in 0..view.elements.len() {
         if view.elements[id].popped {
             let area = view.world_box(id);
@@ -1426,12 +1432,14 @@ pub fn hit(view: &ViewState, images: &mut Images, x: f64, y: f64) -> Option<Elem
     if x < 0.0 || y < 0.0 || x >= width || y >= height {
         return None;
     }
-    hit_in(view, images, view.root, 0.0, 0.0, x, y)
+    hit_in(view, images, measure, view.root, 0.0, 0.0, x, y)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn hit_in(
     view: &ViewState,
     images: &mut Images,
+    measure: &Measure,
     id: ElementId,
     ox: f64,
     oy: f64,
@@ -1445,7 +1453,23 @@ fn hit_in(
     let root = id == view.root;
     let left = if root { 0.0 } else { ox + element.left };
     let top = if root { 0.0 } else { oy + element.top };
-    let inside = x >= left && y >= top && x < left + element.width && y < top + element.height;
+    // A text with no size set is drawn as big as its words, and is clicked there
+    // too: a skin's "reset" link is text like that.
+    let (width, height) = if element.kind == Kind::Text && (element.auto_width || element.auto_height) {
+        let (size, bold, .., mono) = font_of(element);
+        let value = element.props.get("value").map(super::live::text_of).unwrap_or_default();
+        (
+            if element.auto_width {
+                f64::from(measure(&value, size, bold, mono)).ceil() + 1.0
+            } else {
+                element.width
+            },
+            if element.auto_height { line_height(size) } else { element.height },
+        )
+    } else {
+        (element.width, element.height)
+    };
+    let inside = x >= left && y >= top && x < left + width && y < top + height;
     let order = view.in_order(id);
     let split = order.partition_point(|child| view.elements[*child].z < 0);
     match element.kind {
@@ -1454,7 +1478,7 @@ fn hit_in(
                 return None;
             }
             for child in order[split..].iter().rev() {
-                if let Some(found) = hit_in(view, images, *child, left, top, x, y) {
+                if let Some(found) = hit_in(view, images, measure, *child, left, top, x, y) {
                     return Some(found);
                 }
             }
@@ -1463,7 +1487,7 @@ fn hit_in(
                 return Some(id);
             }
             for child in order[..split].iter().rev() {
-                if let Some(found) = hit_in(view, images, *child, left, top, x, y) {
+                if let Some(found) = hit_in(view, images, measure, *child, left, top, x, y) {
                     return Some(found);
                 }
             }
