@@ -163,7 +163,16 @@ fn lyrics_strip(app: &mut App, ctx: &egui::Context) {
     };
     let width = (player.width() * 0.62).clamp(260.0, 520.0);
     let size = vec2(width, 112.0);
-    let place = egui::pos2(player.center().x - width / 2.0, player.max.y + 6.0);
+    // Under the player when there's room; a big player on a small screen has
+    // none, so the strip tucks over the bottom of it instead of going off screen.
+    let below = player.max.y + 6.0;
+    let screen_bottom = ctx.input(|input| input.viewport().monitor_size).map_or(f32::INFINITY, |size| size.y);
+    let top = if below + size.y <= screen_bottom - 4.0 {
+        below
+    } else {
+        (screen_bottom - size.y - 8.0).min(player.max.y - size.y - 8.0).max(player.min.y)
+    };
+    let place = egui::pos2(player.center().x - width / 2.0, top);
     let builder = ViewportBuilder::default()
         .with_title("Lyrics")
         .with_decorations(false)
