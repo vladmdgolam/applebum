@@ -1256,6 +1256,13 @@ async fn warm_up(client: Client, startup_playlist: Option<String>) {
 static STARTED: AtomicBool = AtomicBool::new(false);
 static LOAD_TURN: AtomicU64 = AtomicU64::new(0);
 
+/// The account the app's per-account caches are kept under, once signed in.
+pub fn cache_account() -> Option<crate::api::AccountId> {
+    STARTED
+        .load(Ordering::Acquire)
+        .then(|| crate::api::AccountId::new(DEVICE_ID))
+}
+
 /// Quitting stops the song: the player's process would keep it playing. On the
 /// main thread, before it blocks waiting for the backend to finish.
 pub fn stop_player() {

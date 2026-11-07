@@ -319,10 +319,15 @@ impl ApiGateway {
     }
 
     pub fn account(&self) -> Option<AccountId> {
-        self.state(ApiSource::Shared)
+        let spotify = self
+            .state(ApiSource::Shared)
             .account()
             .cloned()
-            .or_else(|| self.state(ApiSource::Personal).account().cloned())
+            .or_else(|| self.state(ApiSource::Personal).account().cloned());
+        // Signed in to Apple Music, the caches kept per account still need one.
+        #[cfg(feature = "apple-music")]
+        let spotify = spotify.or_else(crate::apple::cache_account);
+        spotify
     }
 
     pub fn personal_ready(&self) -> bool {

@@ -3028,7 +3028,8 @@ impl Worker {
         if std::mem::replace(&mut self.spotify_restore_started, true) {
             return;
         }
-        #[cfg(feature = "apple-music")]
+        // Tests drive this path too, and MusicKit has no place in them.
+        #[cfg(all(feature = "apple-music", not(test)))]
         {
             self.apple = Some(crate::apple::Client::start(
                 self.events.clone(),
