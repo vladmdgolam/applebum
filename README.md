@@ -3,6 +3,11 @@
 A fast, native Apple Music client for macOS with a Winamp face, MilkDrop
 visualizers, and AirPlay for this app alone.
 
+![Applebum wearing the Headspace skin, with its equalizer and playlist open](assets/readme/headspace.png)
+
+*Above: the classic Windows Media Player skin Headspace, which isn't included;
+see [Skins](#skins). Below: the player as it comes.*
+
 ![Applebum's classic player](assets/readme/player.png)
 
 It's a personal project built on [Spotifast](https://github.com/crmne/spotifast)
