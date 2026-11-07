@@ -43,18 +43,31 @@ private func collectResources(_ value: Any, into found: inout [[String: Any]]) {
   }
 }
 
-/// Decodes the songs in a response, off the main thread, and remembers them.
-private func harvestSongs(from data: Data) {
-  Task.detached(priority: .utility) {
-    guard let root = try? JSONSerialization.jsonObject(with: data) else { return }
-    var resources: [[String: Any]] = []
-    collectResources(root, into: &resources)
-    guard !resources.isEmpty,
-      let collection = try? JSONSerialization.data(withJSONObject: ["data": resources]),
-      let songs = try? JSONDecoder().decode(MusicItemCollection<Song>.self, from: collection)
-    else { return }
-    await MainActor.run {
-      for song in songs { knownSongs[song.id.rawValue] = song }
+/// Decodes the songs in a response and remembers them, so playing one needs no
+/// second request. A library song also answers to its catalog ID, which is the
+/// one the interface uses.
+private func harvestSongs(from data: Data) async {
+  guard let root = try? JSONSerialization.jsonObject(with: data) else { return }
+  var resources: [[String: Any]] = []
+  collectResources(root, into: &resources)
+  guard !resources.isEmpty,
+    let collection = try? JSONSerialization.data(withJSONObject: ["data": resources]),
+    let songs = try? JSONDecoder().decode(MusicItemCollection<Song>.self, from: collection)
+  else { return }
+  var catalogIDs: [String: String] = [:]
+  for resource in resources {
+    if let id = resource["id"] as? String,
+      let attributes = resource["attributes"] as? [String: Any],
+      let parameters = attributes["playParams"] as? [String: Any],
+      let catalog = parameters["catalogId"] as? String
+    {
+      catalogIDs[id] = catalog
+    }
+  }
+  await MainActor.run { [catalogIDs] in
+    for song in songs {
+      knownSongs[song.id.rawValue] = song
+      if let catalog = catalogIDs[song.id.rawValue] { knownSongs[catalog] = song }
     }
   }
 }
@@ -91,6 +104,9 @@ private func harvestSongs(from data: Data) {
   return ids.compactMap { knownSongs[$0] }
 }
 
+/// The newest load asked for.
+@MainActor private var latestLoad = 0
+
 // MARK: - Authorization and the Apple Music API
 
 @_cdecl("am_authorize")
@@ -116,7 +132,7 @@ public func amRequest(_ path: UnsafePointer<CChar>, _ context: UnsafeMutableRawP
         return
       }
       let response = try await MusicDataRequest(urlRequest: URLRequest(url: url)).response()
-      harvestSongs(from: response.data)
+      await harvestSongs(from: response.data)
       pending.send(Int32(response.urlResponse.statusCode), response.data)
     } catch {
       // MusicDataRequest throws for non-2xx responses, with the status inside.
@@ -200,6 +216,7 @@ public func amQueue(_ context: UnsafeMutableRawPointer?, _ reply: @escaping AMRe
   Task { @MainActor in
     let queue = ApplicationMusicPlayer.shared.queue
     var result: [String: Any] = [:]
+    var before: [[String: Any]] = []
     var next: [[String: Any]] = []
     var passed = queue.currentEntry == nil
     for entry in queue.entries {
@@ -215,8 +232,11 @@ public func amQueue(_ context: UnsafeMutableRawPointer?, _ reply: @escaping AMRe
       } else if entry.id == queue.currentEntry?.id {
         result["current"] = row
         passed = true
+      } else {
+        before.append(row)
       }
     }
+    result["before"] = before
     result["next"] = next
     pending.sendJSON(result)
   }
@@ -235,6 +255,9 @@ public func amLoad(_ json: UnsafePointer<CChar>, _ context: UnsafeMutableRawPoin
         pending.send(-1, "nothing to play")
         return
       }
+      // The latest choice wins, however long an older one takes to answer.
+      let generation = spec["generation"] as? Int ?? 0
+      if generation > 0 { latestLoad = generation }
       // A warm-up never replaces anything: a song may already be loaded.
       let warm = (spec["warm"] as? Bool) ?? false
       if warm, ApplicationMusicPlayer.shared.queue.currentEntry != nil {
@@ -257,13 +280,18 @@ public func amLoad(_ json: UnsafePointer<CChar>, _ context: UnsafeMutableRawPoin
       let startIndex = present.firstIndex(of: ids[start]) ?? 0
       let resolved = Date()
       let player = ApplicationMusicPlayer.shared
-      if warm, player.queue.currentEntry != nil {
+      if (warm && player.queue.currentEntry != nil) || (generation > 0 && generation != latestLoad) {
         pending.sendJSON(["skipped": true])
         return
       }
       let playing = (spec["play"] as? Bool) ?? true
+      // A warm-up prepares after answering: the list shouldn't wait for it.
       func begin() async throws {
-        if playing { try await player.play() } else { try await player.prepareToPlay() }
+        if playing {
+          try await player.play()
+        } else if !warm {
+          try await player.prepareToPlay()
+        }
       }
       if startIndex == 0 {
         player.queue = ApplicationMusicPlayer.Queue(for: songs)
@@ -284,6 +312,7 @@ public func amLoad(_ json: UnsafePointer<CChar>, _ context: UnsafeMutableRawPoin
         player.playbackTime = TimeInterval(position) / 1000
       }
       let dropped = window.filter { knownSongs[$0] == nil }
+      if warm { Task { @MainActor in try? await player.prepareToPlay() } }
       pending.sendJSON([
         "requested": ids.count,
         "queued": songs.count,
@@ -310,21 +339,21 @@ public func amRequeue(_ json: UnsafePointer<CChar>, _ context: UnsafeMutableRawP
         let ids = spec["ids"] as? [String],
         player.state.shuffleMode == .off,
         let current = player.queue.currentEntry,
+        let playing = current.item?.id.rawValue,
+        let at = ids.firstIndex(where: { $0 == playing || knownSongs[$0]?.id.rawValue == playing })
+      else {
+        // Without the song on in the playlist there's no "after it" to follow.
+        pending.sendJSON(["applied": false])
+        return
+      }
+      let window = Array(ids[(at + 1)...].prefix(300))
+      let upcoming = try await resolveSongs(window, libraryIDs: spec["libraryIDs"] as? [String: String] ?? [:])
+      // The wait let anything happen: only rearrange around the same song.
+      guard player.queue.currentEntry?.id == current.id,
         let position = player.queue.entries.firstIndex(where: { $0.id == current.id })
       else {
         pending.sendJSON(["applied": false])
         return
-      }
-      let window = Array(ids.prefix(300))
-      let songs = try await resolveSongs(window, libraryIDs: spec["libraryIDs"] as? [String: String] ?? [:])
-      // Songs after the current one in the new order; all of them if it was removed.
-      var upcoming = songs
-      if case let .song(playing)? = current.item,
-        let at = songs.firstIndex(where: { $0.id == playing.id })
-      {
-        upcoming = Array(songs[songs.index(after: at)...])
-      } else if let wanted = current.item?.id.rawValue, let at = songs.firstIndex(where: { $0.id.rawValue == wanted }) {
-        upcoming = Array(songs[songs.index(after: at)...])
       }
       let entries = player.queue.entries
       let start = entries.index(after: position)
@@ -360,22 +389,24 @@ public func amControl(_ operation: Int32, _ value: Double) {
   }
 }
 
-/// Jumps `count` songs ahead at once, for a click on a row further down the queue.
+/// Jumps `count` songs at once, back if negative, for a click on a row of the queue.
 @_cdecl("am_skip")
 public func amSkip(_ count: Int32) {
   Task { @MainActor in
     let player = ApplicationMusicPlayer.shared
     do {
-      if count > 1 {
+      if count != 1 {
         let entries = Array(player.queue.entries)
         if let current = player.queue.currentEntry,
           let index = entries.firstIndex(where: { $0.id == current.id }),
-          index + Int(count) < entries.count
+          entries.indices.contains(index + Int(count))
         {
           player.queue.currentEntry = entries[index + Int(count)]
           try await player.play()
-          return
+        } else {
+          NSLog("am_skip %d: no such row", count)
         }
+        return
       }
       try await player.skipToNextEntry()
       if player.state.playbackStatus != .playing { try await player.play() }
@@ -385,13 +416,14 @@ public func amSkip(_ count: Int32) {
   }
 }
 
-/// Stops the player and waits for it, for quitting: its process outlives ours.
+/// Stops the player, for quitting: its process outlives ours. Called on the main
+/// thread, which is about to block, so nothing may wait for a later turn of it.
 @_cdecl("am_stop")
-public func amStop(_ context: UnsafeMutableRawPointer?, _ reply: @escaping AMReply) {
-  let pending = Pending(context: context, reply: reply)
-  Task { @MainActor in
-    ApplicationMusicPlayer.shared.stop()
-    pending.send(200)
+public func amStop() {
+  if Thread.isMainThread {
+    MainActor.assumeIsolated { ApplicationMusicPlayer.shared.stop() }
+  } else {
+    DispatchQueue.main.async { MainActor.assumeIsolated { ApplicationMusicPlayer.shared.stop() } }
   }
 }
 
@@ -431,9 +463,6 @@ public func amState(_ context: UnsafeMutableRawPointer?, _ reply: @escaping AMRe
 
 // MARK: - The audio tap
 
-// Reads the player process's output so the visualizers can react. Nothing is
-// stored or played back: samples only reach an in-memory analysis ring.
-
 private func address(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {
   AudioObjectPropertyAddress(mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
 }
@@ -456,154 +485,15 @@ private func playerProcess() -> AudioObjectID? {
   return nil
 }
 
-private final class PlayerTap: @unchecked Sendable {
-  private let lock = NSLock()
-  private var muted = false
-  private var description: CATapDescription?
-  private var tap = AudioObjectID(kAudioObjectUnknown)
-  private var device = AudioObjectID(kAudioObjectUnknown)
-  private var procID: AudioDeviceIOProcID?
-  private var source = AudioObjectID(kAudioObjectUnknown)
-  private var outputDevice = AudioDeviceID(0)
-  private let queue = DispatchQueue(label: "am.tap", qos: .userInteractive)
-  private let context: UnsafeMutableRawPointer?
-  private let callback: AMAudio
-
-  init(context: UnsafeMutableRawPointer?, callback: @escaping AMAudio) {
-    self.context = context
-    self.callback = callback
-  }
-
-  private func defaultOutput() -> (id: AudioDeviceID, uid: String) {
-    var device = AudioDeviceID(0)
-    var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-    var property = address(kAudioHardwarePropertyDefaultOutputDevice)
-    AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &property, 0, nil, &size, &device)
-    var uid: Unmanaged<CFString>?
-    size = UInt32(MemoryLayout<CFString?>.size)
-    property = address(kAudioDevicePropertyDeviceUID)
-    AudioObjectGetPropertyData(device, &property, 0, nil, &size, &uid)
-    return (device, uid?.takeRetainedValue() as String? ?? "")
-  }
-
-  /// Follows the player process and the default output as they come and go.
-  func refresh() {
-    lock.lock()
-    defer { lock.unlock() }
-    let process = playerProcess()
-    let output = defaultOutput()
-    if process == source, output.id == outputDevice { return }
-    close()
-    guard let process else { return }
-    open(process: process, output: output)
-  }
-
-  private func open(process: AudioObjectID, output: (id: AudioDeviceID, uid: String)) {
-    let description = CATapDescription(stereoMixdownOfProcesses: [process])
-    description.uuid = UUID()
-    description.isPrivate = true
-    description.muteBehavior = muted ? .mutedWhenTapped : .unmuted
-    self.description = description
-    guard AudioHardwareCreateProcessTap(description, &tap) == noErr else {
-      NSLog("am tap: could not create")
-      return
-    }
-    var format = AudioStreamBasicDescription()
-    var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-    var property = address(kAudioTapPropertyFormat)
-    AudioObjectGetPropertyData(tap, &property, 0, nil, &size, &format)
-    let rate = UInt32(format.mSampleRate)
-
-    let aggregate: [String: Any] = [
-      kAudioAggregateDeviceNameKey: "Apple Music client tap",
-      kAudioAggregateDeviceUIDKey: UUID().uuidString,
-      kAudioAggregateDeviceMainSubDeviceKey: output.uid,
-      kAudioAggregateDeviceIsPrivateKey: true,
-      kAudioAggregateDeviceIsStackedKey: false,
-      kAudioAggregateDeviceTapAutoStartKey: true,
-      kAudioAggregateDeviceSubDeviceListKey: [[kAudioSubDeviceUIDKey: output.uid]],
-      kAudioAggregateDeviceTapListKey: [
-        [kAudioSubTapDriftCompensationKey: true, kAudioSubTapUIDKey: description.uuid.uuidString]
-      ],
-    ]
-    guard AudioHardwareCreateAggregateDevice(aggregate as CFDictionary, &device) == noErr else {
-      NSLog("am tap: could not create the aggregate device")
-      close()
-      return
-    }
-    let context = self.context
-    let callback = self.callback
-    let status = AudioDeviceCreateIOProcIDWithBlock(&procID, device, queue) { _, input, _, _, _ in
-      for buffer in UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input)) {
-        guard let data = buffer.mData else { continue }
-        callback(context, data.assumingMemoryBound(to: Float.self), Int(buffer.mDataByteSize) / 4, rate)
-      }
-    }
-    guard status == noErr, let procID, AudioDeviceStart(device, procID) == noErr else {
-      NSLog("am tap: could not start")
-      close()
-      return
-    }
-    source = process
-    outputDevice = output.id
-  }
-
-  fileprivate var tapIsOpen: Bool { tap != kAudioObjectUnknown }
-
-  fileprivate func updateTap(_ description: CATapDescription) {
-    var property = address(kAudioTapPropertyDescription)
-    var value = description
-    let status = withUnsafePointer(to: &value) {
-      AudioObjectSetPropertyData(tap, &property, 0, nil, UInt32(MemoryLayout<CATapDescription>.size), $0)
-    }
-    if status != noErr { NSLog("am tap: could not change muting: %d", status) }
-  }
-
-  private func close() {
-    if let procID {
-      AudioDeviceStop(device, procID)
-      AudioDeviceDestroyIOProcID(device, procID)
-    }
-    procID = nil
-    if device != kAudioObjectUnknown { AudioHardwareDestroyAggregateDevice(device) }
-    device = AudioObjectID(kAudioObjectUnknown)
-    if tap != kAudioObjectUnknown { AudioHardwareDestroyProcessTap(tap) }
-    tap = AudioObjectID(kAudioObjectUnknown)
-    source = AudioObjectID(kAudioObjectUnknown)
-    outputDevice = AudioDeviceID(0)
-  }
-}
-
-/// Silences the player on this Mac while its audio goes to a speaker, or brings it back.
-private nonisolated(unsafe) var sharedTap: PlayerTap?
-
-extension PlayerTap {
-  func setMuted(_ wanted: Bool) {
-    lock.lock()
-    defer { lock.unlock() }
-    muted = wanted
-    guard tapIsOpen, let description else { return }
-    description.muteBehavior = wanted ? .mutedWhenTapped : .unmuted
-    updateTap(description)
-  }
-}
-
-@_cdecl("am_tap_mute")
-public func amTapMute(_ muted: Bool) {
-  sharedTap?.setMuted(muted)
-}
-
-/// Starts following the player's audio for the life of the app. Rust keeps `context` alive.
-@_cdecl("am_tap_start")
-public func amTapStart(_ context: UnsafeMutableRawPointer?, _ callback: @escaping AMAudio) {
-  let tap = PlayerTap(context: context, callback: callback)
-  sharedTap = tap
-  Task.detached(priority: .utility) {
-    while true {
-      tap.refresh()
-      try? await Task.sleep(for: .seconds(1))
-    }
-  }
+/// Apple's player process, whose sound the app takes over: 0 until it exists.
+@_cdecl("am_player_pid")
+public func amPlayerPid() -> Int32 {
+  guard let process = playerProcess() else { return 0 }
+  var pid: pid_t = 0
+  var size = UInt32(MemoryLayout<pid_t>.size)
+  var property = address(kAudioProcessPropertyPID)
+  guard AudioObjectGetPropertyData(process, &property, 0, nil, &size, &pid) == noErr else { return 0 }
+  return pid
 }
 
 // MARK: - Speakers

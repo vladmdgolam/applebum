@@ -1,216 +1,100 @@
-<p align="center">
-  <img src="docs/assets/images/logo.svg" alt="Spotifast logo" width="88" height="88">
-</p>
+# Applebum
 
-<h1 align="center">Spotifast</h1>
+A fast, native Apple Music client for macOS with a Winamp face, MilkDrop
+visualizers, and AirPlay for this app alone.
 
-<p align="center"><strong>Spotify, native and fast.</strong><br>A lightweight music app for Linux, macOS, and Windows.</p>
+![Applebum's classic player](assets/readme/player.png)
 
-<p align="center">
-  <a href="https://spotifast.rocks/download/"><strong>Download</strong></a> ·
-  <a href="https://spotifast.rocks/getting-started/">Getting started</a> ·
-  <a href="https://spotifast.rocks/using-spotifast/">User guide</a> ·
-  <a href="CONTRIBUTING.md">Contribute</a>
-</p>
+It's a personal project built on [Spotifast](https://github.com/crmne/spotifast)
+by Carmine Paolino, which does the hard part: the interface, skins and
+visualizers. Applebum replaces Spotify with Apple Music through Apple's own
+MusicKit, so you need an **Apple Music subscription**. It decrypts nothing:
+Apple's player plays the music.
 
-<p align="center">
-  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Built_with-Rust-1ed760" alt="Built with Rust"></a>
-  <a href="https://spotifast.rocks/download/"><img src="https://img.shields.io/badge/Linux_%C2%B7_macOS_%C2%B7_Windows-24292f" alt="Linux, macOS, and Windows"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-1ed760" alt="MIT license"></a>
-</p>
+## What it does
 
-Spotifast is a Spotify client written in Rust with
-[egui](https://www.egui.rs) and [fastframe](https://fastframe.dev), the
-framework behind a family of native desktop apps. It plays music through
-[Spotify Soloist](https://spotifast.rocks/soloist/) or the built-in
-[librespot](https://github.com/librespot-org/librespot) player, and has no browser engine.
+- **Opens quickly.** About 0.5 s to a window, against about 1.3 s for Music.app,
+  measured on one M1 Pro.
+- **Wears classic skins.** Winamp 2 (`.wsz`) and Windows Media Player (`.wmz`).
+- **Plays on a HomePod by itself.** Send only Applebum to a HomePod while your
+  Mac keeps its other sound. Choose it in Playback > Output.
+- **Has a volume and an equalizer,** which Apple's player doesn't offer apps.
+- **Uses your library,** including songs you uploaded. It doesn't need Music.app
+  open.
+- **MilkDrop** through [projectM](https://github.com/projectM-visualizer/projectm),
+  driven by the music playing.
 
-The interface includes complete
-[translations for all supported languages](docs/_reference/translating.md#languages-and-coverage).
+## Build it
 
-**Playback needs Spotify Premium.** Free accounts can browse and search, but
-cannot play music through Spotifast.
+You need macOS 15 or later on Apple Silicon, Xcode, [Rust](https://rustup.rs),
+CMake (`brew install cmake`), and a paid
+[Apple Developer](https://developer.apple.com/programs/) membership, because
+MusicKit only works from a signed app whose App ID has it enabled.
 
-![Spotifast Home with the playlist library, recommendations, queue, and player visible](docs/screenshot.png)
+1. Create an App ID at
+   https://developer.apple.com/account/resources/identifiers/add/bundleId with
+   your own bundle ID, and tick **MusicKit** under **App Services**. It can take
+   about 20 minutes to start working; until then you'll see
+   `developerTokenRequestFailed` or HTTP 401.
+2. Put it in `.applebum.env`, which git ignores:
+   ```sh
+   echo 'BUNDLE_ID=com.example.applebum' > .applebum.env
+   ```
+3. Build, sign and open it:
+   ```sh
+   scripts/run-apple.sh
+   ```
+   The first build also downloads Mbed TLS. The app lands in
+   `target/release/Applebum.app`; copy it to `/Applications` to keep it.
 
-<details>
-<summary><strong>Watch Spotifast in action</strong></summary>
+macOS asks for Apple Music, audio capture and local network access the first
+time. Audio capture is how volume, the equalizer, visualizers and AirPlay get
+the sound. It stays in memory and is never recorded.
 
-https://github.com/user-attachments/assets/a5f669ce-b3b7-4f8e-9933-976a78876c7e
+## Skins
 
-</details>
+Drop any `.wsz` or `.wmz` on the window to install and wear it. Find them at the
+[Winamp Skin Museum](https://skins.webamp.org) and the Internet Archive's
+[Windows Media Player Skins Collection](https://archive.org/details/windowsmediaplayerskinscollection).
 
-[Features](#your-music-on-your-desktop) · [Install](#install) · [First playback](#start-listening) · [Mini player](#the-winamp-mini-player) · [MilkDrop](#music-in-motion) · [Help](#guides-and-help)
-
-Since 0.15, setup leads with Spotify's
-[Soloist player](https://spotifast.rocks/soloist/), with guided key setup,
-one-time pairing and automatic renewal of expiring builds. New listeners and
-people updating see this choice once after sign-in on supported platforms.
-**Use the built-in player** keeps librespot, with Spotifast's EQ, visualizers,
-local files and full queue editing. The choice is remembered.
-On Linux with PipeWire, Soloist also supports Spotifast’s EQ and visualizers
-through a private audio route. [Native audio support](https://spotifast.rocks/soloist/#native-audio)
-adds EQ and visualizers on macOS 14.2 or newer, and visualizers on Windows 11,
-including MilkDrop. Windows Soloist playback does not support audible EQ.
-The Mac route keeps Soloist at full volume after redirecting its output,
-then applies Spotifast’s volume after the visualizers, including mute. Phone
-volume changes adjust that output level; Spotify’s indicator returns to 100%.
-Windows visuals keep their level as Soloist’s volume falls and stop only when it is muted.
-When enabled, Soloist appears as **This computer**; settings show the controls
-that apply to it. Turning it off restores the built-in player's preferences.
-While Soloist starts and its account is verified, the Spotify loading screen shows
-**Verifying Soloist…** and waits to accept playback commands. Setup takes three
-steps, and ends with choosing the named device in Spotify, with the built-in
-player available as a quiet alternative below the card. If Soloist stops later,
-a banner over the app says so while Spotifast restarts it, and offers **Try
-again** if that does not work. **Settings → Spotify Soloist → Spotify access**
-connects the separate Spotify session for Made for you, listening activity and
-Spotify lyrics without changing players.
-
-## Your music, on your desktop
-
-| Feature | What you can do |
-|---|---|
-| **Library and search** | Browse playlists, Liked Songs, albums, artists, and podcasts. Discover upcoming albums on artist pages and open their countdown to pre-save. Search the catalogue and edit playlists you own. Copy a song's link, title, or artists from its menu. |
-| **Local files** | Play the local files your playlists list from a folder you choose in Settings, at any sample rate. Names show spaces and accents correctly, including in cached playlists. |
-| **Lyrics** | Spotify lyrics when the playback session is signed in, with LRCLIB as fallback. Temporary LRCLIB overloads retry and try search; older cached lyrics remain available during outages. |
-| **Spotify Connect** | Play on this computer or control playback on your other devices, including Google Cast speakers and groups. Cast devices appear as they are discovered; frequently and recently chosen outputs rise to the top. Remote volume keeps your chosen level while Spotify updates. |
-| **Queue** | Add songs to the queue, or choose **Play next** to put a song or selection first when playing on this computer. |
-| **Themes** | Choose light, dark, system appearance, or custom colours, with one theme for light mode and one for dark mode that switch with the system. On Omarchy, follow your desktop theme. |
-| **Desktop controls** | Use keyboard shortcuts and media keys. Keep music playing from the tray when supported by your desktop and settings, and start Spotifast with your computer, with its window or in the tray. |
-| **Winamp mini player** | Use classic skins with an equalizer, playlist, and animated sound displays. |
-| **MilkDrop** | Watch music-reactive visuals in a separate window or full screen. See platform availability below. |
-
-## Install
-
-| Platform | Installation |
-|---|---|
-| **macOS** | `brew install --cask crmne/tap/spotifast`, or [download the Mac app](https://spotifast.rocks/download/#macos). |
-| **Arch Linux** | `yay -S spotifast-bin` |
-| **Windows** | The installer or a portable ZIP, for x64 and ARM, from the [Download page](https://spotifast.rocks/download/#windows). |
-| **Debian, Ubuntu** | The [DEB package](https://spotifast.rocks/download/#debian-and-ubuntu), then `sudo apt install ./spotifast_*.deb` |
-| **Fedora** | The [RPM package](https://spotifast.rocks/download/#fedora), then `sudo dnf install ./spotifast-*.rpm` |
-| **Other Linux** | Find Flatpak, AppImage, Nix, and other options on the [Download page](https://spotifast.rocks/download/#linux). |
-| **From source** | Follow [Build from source](https://spotifast.rocks/getting-started/#build-from-source) for dependencies and commands. |
-
-## Start listening
-
-1. Register Spotifast with Spotify, as the sign-in screen shows: in the
-   [Spotify developer dashboard](https://developer.spotify.com/dashboard),
-   click **Create app**, Spotify's name for this registration, with the
-   redirect URI `http://127.0.0.1:8989/login` and **Web API** ticked. It takes
-   about two minutes and gives you a Client ID. Spotify requires Premium on the
-   account that registers, so a Free account can't do this step itself.
-   [Getting started](https://spotifast.rocks/getting-started/#make-a-spotify-app)
-   has the steps.
-2. Paste the Client ID into Spotifast and choose **Sign in with Spotify**.
-   Approve access in your browser, then return to the app to see your library.
-3. To listen on this computer, open the device menu in the bottom player bar
-   and choose **Set up playback here**, also available in Settings.
-4. Complete the separate playback approval in your browser. Your computer
-   appears as a Spotify Connect device named **Spotifast**.
-
-Library access and local playback have separate approvals. Spotifast remembers
-both using your computer's protected storage. See
-[Getting started](https://spotifast.rocks/getting-started/) for the full walkthrough
-and [How it connects](https://spotifast.rocks/how-it-connects/) for the details.
-
-## The Winamp mini player
-
-A classic look for your music, with Winamp 2 `.wsz` and Windows Media Player `.wmz` skins, an equalizer,
-a playlist, and animated sound displays. Switch with **Ctrl+M**
-(**Cmd+Shift+M** on macOS), the shrink button, or Settings.
-The spectrum analyser and oscilloscope also work in the collapsed title bar.
-
-<p align="center">
-  <img src="docs/assets/images/winamp.png" alt="Spotifast's Winamp mini player with the built-in skin, equalizer, and playlist" width="320">
-</p>
-
-[Explore the mini player](https://spotifast.rocks/winamp/), including skins,
-window sizes, controls, and the return to the main player.
-
-## Music in motion
-
-MilkDrop reacts to music playing on this computer, with more than 10,000
-presets downloaded on first use. Open it from the visualiser button,
-Settings, or the mini player's **V** menu.
-
-![MilkDrop visualiser displaying coloured concentric patterns in Spotifast](docs/assets/images/milkdrop-poster.jpg)
-
-Included on **Linux**, **macOS**, and **Windows Intel/AMD** builds.
-It is not included in the Windows on ARM download.
-[Read the MilkDrop guide](https://spotifast.rocks/milkdrop/) for presets,
-controls, and fullscreen mode.
-
-## Guides and help
-
-The complete guide lives at **[spotifast.rocks](https://spotifast.rocks/)**.
-
-| You want to… | Read |
-|---|---|
-| Sign in, set up playback, or configure themes, fonts, and proxies | [Getting started](https://spotifast.rocks/getting-started/) |
-| Learn shortcuts, command-line controls, and updates | [Everyday use](https://spotifast.rocks/using-spotifast/) |
-| Check storage sizes, clear cached audio and find stored files | [Settings and files](https://spotifast.rocks/settings-and-files/) |
-| Understand scrolling performance and reduce loading delays | [Make it even faster](https://spotifast.rocks/make-it-even-faster/) |
-| Fix "Spotify refused the audio key" or "Spotify is being slow" | [When something goes wrong](https://spotifast.rocks/troubleshooting/) |
-| Understand what is stored and sent | [Privacy](https://spotifast.rocks/privacy/) · [How it connects](https://spotifast.rocks/how-it-connects/) |
-| Check Spotify and librespot limitations | [What Spotify allows](https://spotifast.rocks/what-spotify-allows/) |
-| Is it safe for my account? | [Account safety](https://spotifast.rocks/what-is-spotifast/#account-safety) |
-| Report a bug or propose a feature | Read [Contributing](CONTRIBUTING.md), then use the [issue forms](https://github.com/crmne/spotifast/issues/new/choose). |
-
-## Contributing
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or pull
-request. To look at the interface without a Spotify account, run:
+For the green alien head, **Headspace**, quit Applebum and run:
 
 ```sh
-cargo run --features demo -- --demo
+scripts/install-headspace.sh
 ```
 
-Translations live in `assets/i18n/`; see
-[Translating Spotifast](docs/_reference/translating.md). Release packaging
-is described in [PACKAGING.md](PACKAGING.md).
+It downloads the skin from the Internet Archive, checks it, and turns it on.
+The skin isn't in this repository: it's a classic Windows Media Player skin with
+no published license, so it's fetched on your own machine for your own use.
 
-## More native apps
+## Handy things
 
-**Want WhatsApp just as fast and native?** [ZapFast](https://zapfast.rocks)
-is Spotifast's sibling. Both are built on
-[fastframe](https://fastframe.dev).
+- **Player size:** View > Player Size, or Cmd+Option+= and Cmd+Option+-.
+- **Main window:** Cmd+Shift+M switches between it and the skin.
+- **A playlist waiting at launch:** with Applebum quit, add
+  `"startup_playlist": "Playlist name"` to
+  `~/Library/Application Support/xyz.vladik.applebum/settings.json`.
+- **Command line:** `Applebum.app/Contents/MacOS/Applebum play-search bonobo kiara`.
+  `--help` lists the rest.
 
-## Spotify Connect updates
+## Known limits
 
-With local playback enabled, Spotify pushes changes from other devices over
-Spotifast's existing Connect session. Playback changes trigger a refresh.
-Volume-only changes appear directly for the active playback device without
-an extra request; an unconfirmed volume change made in Spotifast takes
-precedence. Push-triggered refreshes are at least a second apart and wait for
-a pending playback read to finish. Changes received during that read are
-folded into one follow-up.
-Connect pushes are ignored when this computer is the active device both
-before and after; position-only updates cause no requests. Regular polling
-remains the fallback.
+- Home's personal shelves are empty. Queue and library are the way around for now.
+- The first song after launch takes about 2-3 s, which Apple's player decides.
+- Only HomePods are offered for AirPlay. Apple TVs need a PIN, which isn't built.
+- AirPlay buffers, so visuals can run ahead of a HomePod's sound and pause can lag.
+- Apple offers no way to remove a song from your library, so taking back a heart
+  clears the rating and leaves the song there.
+- Lossless playback is unconfirmed: MusicKit doesn't report what it's playing.
+- Spotify code from upstream is still in the tree, unused. Only macOS is supported.
+- Skins run their own scripts inside the app's interpreter, as they always did.
+  Install ones you trust.
 
-## Sonos playback
+## Credits and license
 
-Sonos speakers use the Spotify Connect session for playback control. Enable
-local playback first, then select the speaker in the device picker.
+MIT, see [LICENSE](LICENSE). Built on Spotifast (MIT) by Carmine Paolino.
+AirPlay comes from [airplay2-sender-cpp](https://github.com/akustikrausch/airplay2-sender-cpp)
+(Apache-2.0), vendored in `third_party/` with its notices.
 
-## Acknowledgements
-
-Spotifast uses [librespot](https://github.com/librespot-org/librespot),
-[egui](https://www.egui.rs), [fastframe](https://fastframe.dev), the [Inter](https://rsms.me/inter/)
-typeface (OFL), and [Lucide](https://lucide.dev) icons (ISC).
-
-Spotifast is an independent project and is not affiliated with Spotify.
-Spotify is a trademark of Spotify AB.
-
-Licensed under the [MIT License](LICENSE).
-
-## Star history
-
-<a href="https://www.star-history.com/?repos=crmne%2Fspotifast&amp;type=date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=crmne/spotifast&amp;type=date&amp;theme=dark">
-    <img alt="Spotifast GitHub stars over time" src="https://api.star-history.com/chart?repos=crmne/spotifast&amp;type=date">
-  </picture>
-</a>
+Applebum is an independent project, not affiliated with or endorsed by Apple,
+Spotify, Microsoft or Winamp. Apple Music and HomePod are trademarks of Apple Inc.

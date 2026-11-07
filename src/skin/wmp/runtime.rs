@@ -522,6 +522,18 @@ impl Runtime {
                     ],
                 );
             }
+            // The song on moved: bring its row into view, with a little above it.
+            if old.playing != new.playing
+                && let Some(playing) = new.playing
+            {
+                let state = &mut self.views[index].state;
+                for element in &mut state.elements {
+                    if element.kind == Kind::Playlist {
+                        element.scroll = playing.saturating_sub(1) as f64;
+                        state.changed = true;
+                    }
+                }
+            }
             if old.queue != new.queue {
                 // A list that shrank can leave its scroll past the end, which
                 // draws nothing until the wheel next clamps it.

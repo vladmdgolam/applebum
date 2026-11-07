@@ -1694,6 +1694,8 @@ impl Backend {
     }
 
     pub fn shutdown(&mut self) {
+        #[cfg(feature = "apple-music")]
+        crate::apple::stop_player();
         self.send(Command::Shutdown);
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
@@ -3032,6 +3034,9 @@ impl Worker {
                 self.events.clone(),
                 self.waker.clone(),
                 Arc::clone(&self.engine_config.tap),
+                self.engine_config.eq.clone(),
+                self.engine_config.initial_volume,
+                self.engine_config.startup_playlist.clone(),
             ));
             return;
         }

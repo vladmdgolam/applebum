@@ -1357,6 +1357,10 @@ impl Shell {
                 MenuCommand::VolumeUp => Action::VolumeBy(5),
                 MenuCommand::VolumeDown => Action::VolumeBy(-5),
                 MenuCommand::ToggleMute => Action::ToggleMute,
+                MenuCommand::SkinSize(percent) => Action::SetSkinZoom(f32::from(percent) / 100.0),
+                MenuCommand::SkinLarger => Action::SetSkinZoom(app.settings.skin_zoom * 1.15),
+                MenuCommand::SkinSmaller => Action::SetSkinZoom(app.settings.skin_zoom / 1.15),
+                MenuCommand::SkinActualSize => Action::SetSkinZoom(1.0),
                 MenuCommand::Output(row) => {
                     let Some(id) = app.output_id(row) else {
                         continue;
@@ -1374,7 +1378,7 @@ impl Shell {
                 MenuCommand::Back => Action::Back,
                 MenuCommand::Forward => Action::Forward,
                 MenuCommand::OpenRepo => {
-                    ctx.open_url(egui::OpenUrl::new_tab("https://github.com/crmne/spotifast"));
+                    ctx.open_url(egui::OpenUrl::new_tab("https://github.com/vladmdgolam/applebum"));
                     continue;
                 }
                 // Editing goes through egui, which owns the text field

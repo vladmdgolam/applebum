@@ -1,13 +1,13 @@
 [package]
 name = "spotifast"
 default-run = "spotifast"
-version = "0.17.1"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.98"
 license = "MIT"
-description = "A native Spotify client"
-repository = "https://github.com/crmne/spotifast"
-keywords = ["spotify", "music", "egui", "librespot", "player"]
+description = "A fast native Apple Music client with a Winamp face"
+repository = "https://github.com/vladmdgolam/applebum"
+keywords = ["apple-music", "music", "egui", "winamp", "player"]
 categories = ["multimedia::audio"]
 
 [lib]
@@ -221,7 +221,7 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 # macOS hands an app registered for the scheme (src/mac_links.rs), and
 # NSRunLoop has the delayed perform that minimizes the window
 # (src/window.rs).
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSAppleEventDescriptor", "NSAppleEventManager", "NSDate", "NSObjCRuntime", "NSRunLoop", "NSString", "NSThread", "NSDictionary", "NSAttributedString", "NSData"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "NSAppleEventDescriptor", "NSAppleEventManager", "NSDate", "NSObjCRuntime", "NSRunLoop", "NSString", "NSThread", "NSDictionary", "NSAttributedString", "NSData"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-native-keyring-store = { version = "1.1", default-features = false }
@@ -267,7 +267,7 @@ winresource = "0.1"
 default = ["milkdrop", "soloist-native-audio", "apple-music"]
 # Apple Music through MusicKit in place of Spotify. macOS only; the app must
 # run from a signed bundle whose App ID has MusicKit enabled.
-apple-music = ["dep:cc"]
+apple-music = ["dep:cc", "soloist-native-audio"]
 # Process-only Soloist audio: Mac EQ and visualizers, Windows visualizers.
 soloist-native-audio = ["dep:cc"]
 # Keep the existing maintainer preview command working.

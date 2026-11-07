@@ -30,6 +30,11 @@ pub enum MenuCommand {
     SelectAll,
     /// A row of the Output menu, by its place in the list last given to `set_outputs`.
     Output(u8),
+    /// The size slider's value, in percent.
+    SkinSize(u16),
+    SkinLarger,
+    SkinSmaller,
+    SkinActualSize,
 }
 
 /// The Dock menu's first item, which names what a click will do.
@@ -58,6 +63,9 @@ pub fn set_playing(_playing: bool) {}
 
 #[cfg(not(target_os = "macos"))]
 pub fn set_outputs(_outputs: &[(String, bool)]) {}
+
+#[cfg(not(target_os = "macos"))]
+pub fn set_skin_zoom(_zoom: f32) {}
 
 #[cfg(target_os = "macos")]
 pub use mac_impl::*;
@@ -89,6 +97,8 @@ mod mac_impl {
         static HANDLER: OnceCell<Retained<SpotifastMenuHandler>> = const { OnceCell::new() };
         /// The Output submenu, filled by `set_outputs`.
         static OUTPUT_MENU: OnceCell<Retained<NSMenu>> = const { OnceCell::new() };
+        /// The View menu's size slider, kept in step with the keyboard items.
+        static SIZE_SLIDER: OnceCell<Retained<NSObject>> = const { OnceCell::new() };
     }
 
     pub fn set_waker(wake: impl Fn() + Send + Sync + 'static) {
@@ -141,6 +151,52 @@ mod mac_impl {
     /// for the menu each time it opens, so the next one reads this.
     pub fn set_playing(playing: bool) {
         PLAYING.store(playing, Ordering::Relaxed);
+    }
+
+    /// Moves the size slider to the size chosen some other way.
+    pub fn set_skin_zoom(zoom: f32) {
+        SIZE_SLIDER.with(|slider| {
+            if let Some(slider) = slider.get() {
+                let () = unsafe { msg_send![&**slider, setDoubleValue: f64::from(zoom)] };
+            }
+        });
+    }
+
+    /// The View menu's player size controls: a slider like the Dock's, and
+    /// keyboard items, which leave Cmd-= to the interface's own zoom.
+    fn add_size_items(mtm: MainThreadMarker, menu: &NSMenu, target: Option<&NSObject>) {
+        use objc2_foundation::{NSPoint, NSRect, NSSize};
+        menu.addItem(&NSMenuItem::separatorItem(mtm));
+        let title = create_item(mtm, ns_string!("Player Size"), None, ns_string!(""), None, None);
+        title.setEnabled(false);
+        menu.addItem(&title);
+        if let Some(class) = AnyClass::get(c"NSSlider") {
+            let slider: Option<Retained<NSObject>> = unsafe {
+                msg_send![
+                    class,
+                    sliderWithValue: 1.0f64,
+                    minValue: 0.5f64,
+                    maxValue: 3.0f64,
+                    target: target,
+                    action: sel!(skinSizeChanged:)
+                ]
+            };
+            if let Some(slider) = slider {
+                let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 26.0));
+                let () = unsafe { msg_send![&*slider, setFrame: frame] };
+                let () = unsafe { msg_send![&*slider, setContinuous: true] };
+                let item = create_item(mtm, ns_string!("Size"), None, ns_string!(""), None, None);
+                let () = unsafe { msg_send![&*item, setView: &*slider] };
+                menu.addItem(&item);
+                SIZE_SLIDER.with(|cell| {
+                    let _ = cell.set(slider);
+                });
+            }
+        }
+        let keys = NSEventModifierFlags::Command | NSEventModifierFlags::Option;
+        menu.addItem(&create_item(mtm, ns_string!("Larger"), Some(sel!(skinLarger:)), ns_string!("="), Some(keys), target));
+        menu.addItem(&create_item(mtm, ns_string!("Smaller"), Some(sel!(skinSmaller:)), ns_string!("-"), Some(keys), target));
+        menu.addItem(&create_item(mtm, ns_string!("Actual Size"), Some(sel!(skinActualSize:)), ns_string!("0"), Some(keys), target));
     }
 
     /// Fills the Output menu: each output's name, and whether the sound goes there.
@@ -311,6 +367,27 @@ mod mac_impl {
             #[unsafe(method(editSelectAll:))]
             fn edit_select_all(&self, _sender: &NSObject) {
                 push_command(MenuCommand::SelectAll);
+            }
+
+            #[unsafe(method(skinSizeChanged:))]
+            fn skin_size_changed(&self, sender: &NSObject) {
+                let value: f64 = unsafe { msg_send![sender, doubleValue] };
+                push_command(MenuCommand::SkinSize((value * 100.0).round() as u16));
+            }
+
+            #[unsafe(method(skinLarger:))]
+            fn skin_larger(&self, _sender: &NSObject) {
+                push_command(MenuCommand::SkinLarger);
+            }
+
+            #[unsafe(method(skinSmaller:))]
+            fn skin_smaller(&self, _sender: &NSObject) {
+                push_command(MenuCommand::SkinSmaller);
+            }
+
+            #[unsafe(method(skinActualSize:))]
+            fn skin_actual_size(&self, _sender: &NSObject) {
+                push_command(MenuCommand::SkinActualSize);
             }
 
             #[unsafe(method(selectOutput:))]
@@ -713,6 +790,7 @@ mod mac_impl {
             Some(NSEventModifierFlags::Control | NSEventModifierFlags::Command),
             None,
         ));
+        add_size_items(mtm, &view_menu, Some(target));
         menubar.addItem(&view_item);
 
         // 6. Window menu

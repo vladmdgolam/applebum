@@ -9,6 +9,7 @@
 
 use std::ffi::{CString, c_char, c_void};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -24,21 +25,17 @@ use crate::player::{LoadSpec, LocalState, LocalTrack, Playback, PlayerCommand, R
 
 pub const DEVICE_ID: &str = "apple-music";
 
-/// The playlist waiting in the player at launch, paused.
-const STARTUP_PLAYLIST: &str = "2026";
 
 type Reply = extern "C" fn(*mut c_void, i32, *const u8, usize);
-type Audio = extern "C" fn(*mut c_void, *const f32, usize, u32);
 
 unsafe extern "C" {
     fn am_authorize(context: *mut c_void, reply: Reply);
     fn am_request(path: *const c_char, context: *mut c_void, reply: Reply);
     fn am_load(json: *const c_char, context: *mut c_void, reply: Reply);
     fn am_control(operation: i32, value: f64);
-    fn am_stop(context: *mut c_void, reply: Reply);
+    fn am_stop();
     fn am_skip(count: i32);
     fn am_state(context: *mut c_void, reply: Reply);
-    fn am_tap_start(context: *mut c_void, callback: Audio);
     fn am_send(
         method: *const c_char,
         path: *const c_char,
@@ -46,7 +43,6 @@ unsafe extern "C" {
         context: *mut c_void,
         reply: Reply,
     );
-    fn am_tap_mute(muted: bool);
     fn am_speakers_start();
     fn am_speakers(context: *mut c_void, reply: Reply);
     fn am_speaker_resolve(name: *const c_char, context: *mut c_void, reply: Reply);
@@ -214,6 +210,29 @@ fn track_from_player(song: &Value) -> Track {
     }
 }
 
+/// A song earlier in the queue than the one on.
+#[derive(Clone)]
+pub struct PlayedSong {
+    pub title: String,
+    pub artist: String,
+    pub uri: String,
+    pub duration_s: f64,
+}
+
+/// The queue's model has no place for songs already passed, but a skin's list
+/// shows the whole queue, with the song on in its place.
+static PLAYED: std::sync::Mutex<Vec<PlayedSong>> = std::sync::Mutex::new(Vec::new());
+
+pub fn played_songs() -> Vec<PlayedSong> {
+    PLAYED.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
+}
+
+/// Moves through the queue by this many songs, back if negative.
+pub fn jump(songs: i32) {
+    // SAFETY: am_skip only reads its plain argument.
+    unsafe { am_skip(songs) };
+}
+
 async fn player_queue() -> ApiResult<Queue> {
     let (status, body) = call(|context, reply| unsafe { am_queue(context, reply) }).await;
     if status != 200 {
@@ -221,6 +240,19 @@ async fn player_queue() -> ApiResult<Queue> {
     }
     let state: Value =
         serde_json::from_slice(&body).map_err(|error| ApiError::Decode(error.to_string()))?;
+    let before: Vec<PlayedSong> = state["before"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|song| PlayedSong {
+            title: text(song, "title"),
+            artist: text(song, "artist"),
+            uri: format!("spotify:track:{}", text(song, "id")),
+            duration_s: song["durationMs"].as_f64().unwrap_or_default() / 1000.0,
+        })
+        .collect();
+    log::info!("apple: queue has {} songs before the current one", before.len());
+    *PLAYED.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = before;
     Ok(Queue {
         currently_playing: state
             .get("current")
@@ -268,6 +300,7 @@ fn speaker_name(id: &str) -> Option<String> {
 }
 
 struct Speaker {
+    id: usize,
     name: String,
     session: *mut c_void,
 }
@@ -277,8 +310,13 @@ unsafe impl Send for Speaker {}
 
 /// The speaker this app's audio goes to, if any.
 static SPEAKER: std::sync::Mutex<Option<Speaker>> = std::sync::Mutex::new(None);
-static SPEAKER_STARTED: std::sync::Mutex<Option<oneshot::Sender<Result<(), String>>>> =
+static SPEAKER_STARTED: std::sync::Mutex<Option<(usize, oneshot::Sender<Result<(), String>>)>> =
     std::sync::Mutex::new(None);
+static NEXT_SESSION: AtomicUsize = AtomicUsize::new(1);
+static ROUTE_TURN: AtomicU64 = AtomicU64::new(0);
+static ROUTING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+/// A speaker's level on arrival, in percent, at most.
+const SPEAKER_START_VOLUME: u8 = 30;
 static EVENTS: std::sync::OnceLock<(std::sync::mpsc::Sender<Event>, Waker)> =
     std::sync::OnceLock::new();
 
@@ -286,7 +324,9 @@ fn speaker_lock() -> std::sync::MutexGuard<'static, Option<Speaker>> {
     SPEAKER.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-extern "C" fn on_speaker_event(_context: *mut c_void, kind: i32, message: *const c_char) {
+extern "C" fn on_speaker_event(context: *mut c_void, kind: i32, message: *const c_char) {
+    // The context is the session's number, not a pointer.
+    let id = context as usize;
     let message = if message.is_null() {
         String::new()
     } else {
@@ -295,18 +335,25 @@ extern "C" fn on_speaker_event(_context: *mut c_void, kind: i32, message: *const
             .to_string_lossy()
             .into_owned()
     };
-    let starting = SPEAKER_STARTED
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .take();
+    let starting = {
+        let mut started = SPEAKER_STARTED
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if started.as_ref().is_some_and(|(waiting, _)| *waiting == id) {
+            started.take().map(|(_, sender)| sender)
+        } else {
+            None
+        }
+    };
     if let Some(starting) = starting {
         let _ = starting.send(if kind == 1 { Ok(()) } else { Err(message) });
     } else if kind != 1 {
         // The speaker went away mid-song: the music comes back on this Mac. The
         // session is torn down elsewhere, since this runs on its own thread.
-        std::thread::spawn(|| {
-            leave_speaker();
-            if let Some((events, waker)) = EVENTS.get() {
+        std::thread::spawn(move || {
+            if leave_speaker(Some(id))
+                && let Some((events, waker)) = EVENTS.get()
+            {
                 emit(
                     events,
                     waker,
@@ -317,28 +364,42 @@ extern "C" fn on_speaker_event(_context: *mut c_void, kind: i32, message: *const
     }
 }
 
-/// Back to this Mac. Unmutes first, so the music is never silent in between.
-fn leave_speaker() {
-    // SAFETY: am_tap_mute only reads its plain argument.
-    unsafe { am_tap_mute(false) };
-    let leaving = speaker_lock().take();
-    if let Some(speaker) = leaving {
-        // SAFETY: taking it out of `SPEAKER` makes this the session's last use.
-        unsafe { am_airplay_stop(speaker.session) };
-        log::info!("apple: stopped streaming to {}", speaker.name);
-    }
+/// Back to this Mac, from this session if one is named, or from any. Says whether
+/// it left one. The sound moves first, so it's never silent in between.
+fn leave_speaker(only: Option<usize>) -> bool {
+    let leaving = {
+        let mut speaker = speaker_lock();
+        if only.is_some() && speaker.as_ref().map(|speaker| speaker.id) != only {
+            return false;
+        }
+        SPEAKER_ON.store(false, Ordering::Release);
+        speaker.take()
+    };
+    let Some(speaker) = leaving else {
+        return false;
+    };
+    // SAFETY: taking it out of `SPEAKER` makes this the session's last use.
+    unsafe { am_airplay_stop(speaker.session) };
+    log::info!("apple: stopped streaming to {}", speaker.name);
+    true
 }
 
 async fn route_to(device_id: &str) -> ApiResult<()> {
+    // One change of output at a time; of several waiting, only the newest matters.
+    let turn = ROUTE_TURN.fetch_add(1, Ordering::SeqCst) + 1;
+    let _one_at_a_time = ROUTING.lock().await;
+    if ROUTE_TURN.load(Ordering::SeqCst) != turn {
+        return Ok(());
+    }
     let failed = |message: String| ApiError::Status { status: 0, message };
     let Some(name) = speaker_name(device_id) else {
         // Stopping joins the sender's thread, which flushes its goodbye.
-        let _ = tokio::task::spawn_blocking(leave_speaker).await;
+        let _ = tokio::task::spawn_blocking(|| leave_speaker(None)).await;
         return Ok(());
     };
     let name = name.as_str();
     let began = Instant::now();
-    let _ = tokio::task::spawn_blocking(leave_speaker).await;
+    let _ = tokio::task::spawn_blocking(|| leave_speaker(None)).await;
     let wanted = c_string(name);
     let (status, body) =
         call(|context, reply| unsafe { am_speaker_resolve(wanted.as_ptr(), context, reply) }).await;
@@ -350,34 +411,48 @@ async fn route_to(device_id: &str) -> ApiResult<()> {
     let host = c_string(address["host"].as_str().unwrap_or_default());
     let port = address["port"].as_u64().unwrap_or(7000) as u16;
     log::info!("apple: connecting to {name} at {host:?}:{port}");
+    let id = NEXT_SESSION.fetch_add(1, Ordering::SeqCst);
     let (started, starting) = oneshot::channel();
-    *SPEAKER_STARTED.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(started);
-    // SAFETY: the sender copies its strings before returning.
+    *SPEAKER_STARTED.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some((id, started));
+    // SAFETY: the sender copies its strings before returning. The context only
+    // carries the session's number back and is never dereferenced.
     let session = unsafe {
-        am_airplay_start(host.as_ptr(), port, wanted.as_ptr(), std::ptr::null_mut(), on_speaker_event)
+        am_airplay_start(host.as_ptr(), port, wanted.as_ptr(), id as *mut c_void, on_speaker_event)
     };
     *speaker_lock() = Some(Speaker {
+        id,
         name: name.to_owned(),
         session,
     });
     let outcome = tokio::time::timeout(Duration::from_secs(15), starting).await;
-    match outcome {
+    let reason = match outcome {
         Ok(Ok(Ok(()))) => {
-            // Only now: if the speaker had failed, the music would have kept playing here.
-            unsafe { am_tap_mute(true) };
-            log::info!("apple: streaming to {name}, {} ms to connect", began.elapsed().as_millis());
-            Ok(())
+            let mut speaker = speaker_lock();
+            // It can already have closed again.
+            if let Some(speaker) = speaker.as_mut().filter(|speaker| speaker.id == id) {
+                // A speaker's own level can't be read, so it's set: quiet enough
+                // that going to a speaker is never a surprise.
+                let level = MAC_VOLUME.load(Ordering::Relaxed).min(SPEAKER_START_VOLUME);
+                SPEAKER_VOLUME.store(level, Ordering::Relaxed);
+                // SAFETY: the lock keeps the session alive for this call.
+                unsafe { am_airplay_volume(speaker.session, f64::from(level)) };
+                // Only now: had the speaker failed, the music would have kept playing here.
+                SPEAKER_ON.store(true, Ordering::Release);
+                log::info!("apple: streaming to {name}, {} ms to connect", began.elapsed().as_millis());
+                return Ok(());
+            }
+            "it closed the session".to_owned()
         }
-        other => {
-            let _ = tokio::task::spawn_blocking(leave_speaker).await;
-            let reason = match other {
-                Ok(Ok(Err(reason))) => reason,
-                _ => "it didn't answer in time".to_owned(),
-            };
-            log::warn!("apple: couldn't stream to {name}: {reason}");
-            Err(failed(format!("Couldn't connect to {name}: {reason}")))
-        }
-    }
+        Ok(Ok(Err(reason))) => reason,
+        _ => "it didn't answer in time".to_owned(),
+    };
+    SPEAKER_STARTED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take();
+    let _ = tokio::task::spawn_blocking(move || leave_speaker(Some(id))).await;
+    log::warn!("apple: couldn't stream to {name}: {reason}");
+    Err(failed(format!("Couldn't connect to {name}: {reason}")))
 }
 
 async fn speakers() -> ApiResult<Vec<Device>> {
@@ -626,7 +701,20 @@ async fn playlist_tracks(id: &str, offset: u32) -> ApiResult<Page<Track>> {
     Ok(listed(&found, offset, track))
 }
 
-/// A library album or artist has its own `l.`/`r.` ID, and lives under /me.
+/// A library artist has its own `r.` ID, and lives under /me.
+fn is_library_id(id: &str) -> bool {
+    id.starts_with("r.")
+}
+
+fn artist_path(id: &str, rest: &str) -> String {
+    if is_library_id(id) {
+        format!("/v1/me/library/artists/{id}{rest}")
+    } else {
+        format!("/v1/catalog/{{storefront}}/artists/{id}{rest}")
+    }
+}
+
+/// A library album has its own `l.` ID, and lives under /me.
 fn album_path(id: &str) -> String {
     if id.starts_with("l.") {
         format!("/v1/me/library/albums/{id}?include=tracks,artists")
@@ -664,6 +752,9 @@ async fn album_tracks(id: &str) -> ApiResult<Page<Track>> {
 }
 
 async fn artist_top_songs(id: &str) -> ApiResult<Vec<Track>> {
+    if is_library_id(id) {
+        return Ok(Vec::new());
+    }
     let found = get(&format!(
         "/v1/catalog/{{storefront}}/artists/{id}/view/top-songs?limit=20"
     ))
@@ -873,7 +964,7 @@ pub async fn dispatch(request: &ApiRequest) -> Option<ApiResponse> {
             result: album_tracks(id).await,
         },
         ApiRequest::Artist { id } => {
-            let found = get(&format!("/v1/catalog/{{storefront}}/artists/{id}")).await;
+            let found = get(&artist_path(id, "")).await;
             ApiResponse::Artist {
                 id: id.clone(),
                 result: found.and_then(|found| {
@@ -890,10 +981,7 @@ pub async fn dispatch(request: &ApiRequest) -> Option<ApiResponse> {
             result: artist_top_songs(id).await,
         },
         ApiRequest::ArtistAlbums { id, groups, offset } => {
-            let found = get(&format!(
-                "/v1/catalog/{{storefront}}/artists/{id}/albums?limit=25&offset={offset}"
-            ))
-            .await;
+            let found = get(&artist_path(id, &format!("/albums?limit=25&offset={offset}"))).await;
             ApiResponse::ArtistAlbums {
                 id: id.clone(),
                 groups: groups.clone(),
@@ -908,10 +996,12 @@ pub async fn dispatch(request: &ApiRequest) -> Option<ApiResponse> {
             }
         }
         ApiRequest::RelatedArtists { id } => {
-            let found = get(&format!(
-                "/v1/catalog/{{storefront}}/artists/{id}/view/similar-artists?limit=20"
-            ))
-            .await;
+            // Only the catalog knows who's similar, and a library artist isn't in it.
+            let found = if is_library_id(id) {
+                Ok(json!({"data": []}))
+            } else {
+                get(&artist_path(id, "/view/similar-artists?limit=20")).await
+            };
             ApiResponse::RelatedArtists {
                 id: id.clone(),
                 result: found.map(|found| {
@@ -981,7 +1071,8 @@ async fn playlist_songs(
                 None => ids.push(library),
             }
         }
-        if !more || offset >= 1000 {
+        // Apple's own limit on a playlist is far above what anyone queues.
+        if !more || offset >= 5000 {
             return Ok((ids, library_ids));
         }
     }
@@ -1023,6 +1114,8 @@ async fn follow_playlist(client: Client) {
 }
 
 async fn load(spec: LoadSpec, warm: bool) -> anyhow::Result<()> {
+    // A warm-up isn't a choice, and yields to any that is made.
+    let turn = if warm { 0 } else { LOAD_TURN.fetch_add(1, Ordering::SeqCst) + 1 };
     let began = Instant::now();
     let mut library_ids = serde_json::Map::new();
     let mut next_following = None;
@@ -1071,8 +1164,13 @@ async fn load(spec: LoadSpec, warm: bool) -> anyhow::Result<()> {
             spec.context_uri.as_deref().unwrap_or("this")
         );
     }
+    // Fetching a long playlist takes a while: something newer may have been chosen.
+    if turn > 0 && LOAD_TURN.load(Ordering::SeqCst) != turn {
+        return Ok(());
+    }
     let request = c_string(
         &json!({
+            "generation": turn,
             "start": start_index(&spec, &ids),
             "positionMs": spec.position_ms,
             "play": spec.play,
@@ -1114,17 +1212,20 @@ async fn playlist_named(name: &str) -> Option<String> {
     }
 }
 
-async fn warm_up(client: Client) {
+async fn warm_up(client: Client, startup_playlist: Option<String>) {
     use std::sync::atomic::Ordering;
     let began = Instant::now();
-    let spec = if let Some(playlist) = playlist_named(STARTUP_PLAYLIST).await {
+    let wanted = match &startup_playlist {
+        Some(name) => playlist_named(name).await,
+        None => None,
+    };
+    let spec = if let Some(playlist) = wanted {
         LoadSpec {
             context_uri: Some(playlist),
             play: false,
             ..Default::default()
         }
     } else {
-        log::info!("apple: no playlist named {STARTUP_PLAYLIST}, using the last song played");
         let Ok(recent) = get("/v1/me/recent/played/tracks?limit=1").await else {
             return;
         };
@@ -1149,6 +1250,18 @@ async fn warm_up(client: Client) {
             emit(&client.events, &client.waker, Event::RemoteChanged);
         }
         Err(error) => log::warn!("apple: warm-up failed: {error}"),
+    }
+}
+
+static STARTED: AtomicBool = AtomicBool::new(false);
+static LOAD_TURN: AtomicU64 = AtomicU64::new(0);
+
+/// Quitting stops the song: the player's process would keep it playing. On the
+/// main thread, before it blocks waiting for the backend to finish.
+pub fn stop_player() {
+    if STARTED.load(Ordering::Acquire) {
+        // SAFETY: takes no arguments.
+        unsafe { am_stop() };
     }
 }
 
@@ -1178,8 +1291,13 @@ impl Client {
         events: std::sync::mpsc::Sender<Event>,
         waker: Waker,
         tap: Arc<crate::vis::AudioTap>,
+        eq: crate::eq::SharedEq,
+        initial_volume: u16,
+        startup_playlist: Option<String>,
     ) -> Self {
+        MAC_VOLUME.store(crate::app::volume_to_percent(initial_volume), Ordering::Relaxed);
         let _ = EVENTS.set((events.clone(), waker.clone()));
+        STARTED.store(true, Ordering::Release);
         let client = Self {
             events,
             waker,
@@ -1222,22 +1340,22 @@ impl Client {
                     device_id: DEVICE_ID.to_owned(),
                 }),
             );
-            start_tap(tap);
+            start_route(eq, tap);
             // SAFETY: takes no arguments and keeps its own state.
             unsafe { am_speakers_start() };
             // The last song, paused: somewhere to resume, and the player's
             // process is already up when the first song is chosen.
-            tokio::spawn(warm_up(starting.clone()));
+            tokio::spawn(warm_up(starting.clone(), startup_playlist));
             tokio::spawn(follow_playlist(starting.clone()));
             starting.report_state().await;
         });
         client
     }
 
-    /// Quitting stops the song: the player's process would keep it playing.
+    /// Quitting says goodbye to the speaker, or it stays held for minutes.
     pub async fn stop(&self) {
-        let stopped = call(|context, reply| unsafe { am_stop(context, reply) });
-        let _ = tokio::time::timeout(Duration::from_millis(500), stopped).await;
+        let leaving = tokio::task::spawn_blocking(|| leave_speaker(None));
+        let _ = tokio::time::timeout(Duration::from_secs(2), leaving).await;
     }
 
     pub fn player(&self, command: PlayerCommand) {
@@ -1295,13 +1413,17 @@ impl Client {
                     }
                 });
             }
-            // MusicKit has no volume of its own, but a speaker we stream to does.
+            // MusicKit has no volume of its own: the route or the speaker applies it.
             PlayerCommand::Volume(volume) | PlayerCommand::VolumePreview(volume) => {
-                if let Some(speaker) = speaker_lock().as_ref() {
+                let percent = crate::app::volume_to_percent(volume);
+                if SPEAKER_ON.load(Ordering::Acquire)
+                    && let Some(speaker) = speaker_lock().as_ref()
+                {
+                    SPEAKER_VOLUME.store(percent, Ordering::Relaxed);
                     // SAFETY: the lock keeps the session alive for this call.
-                    unsafe {
-                        am_airplay_volume(speaker.session, f64::from(volume) / f64::from(u16::MAX) * 100.0);
-                    }
+                    unsafe { am_airplay_volume(speaker.session, f64::from(percent)) };
+                } else {
+                    MAC_VOLUME.store(percent, Ordering::Relaxed);
                 }
             }
             PlayerCommand::ClearQueue | PlayerCommand::Transfer => {}
@@ -1325,7 +1447,7 @@ impl Client {
         let mut seek_sequence = 0;
         let mut last_id = String::new();
         let mut last_position: Option<(u32, Instant)> = None;
-        let mut last_sent: Option<(Playback, String, bool, RepeatMode)> = None;
+        let mut last_sent: Option<(Playback, String, bool, RepeatMode, u8)> = None;
         let mut sent_at = Instant::now();
         loop {
             tokio::time::sleep(Duration::from_millis(250)).await;
@@ -1349,6 +1471,8 @@ impl Client {
             if id != last_id {
                 last_id.clone_from(&id);
                 track_sequence += 1;
+                // The rows around the song on have moved: fetch them.
+                emit(&self.events, &self.waker, Event::RemoteChanged);
             }
             if playback == Playback::Playing && position_ms > 0 {
                 let mut asked = self
@@ -1377,7 +1501,12 @@ impl Client {
                 1 => RepeatMode::Context,
                 _ => RepeatMode::Off,
             };
-            let summary = (playback, id.clone(), shuffle, repeat);
+            let level = if SPEAKER_ON.load(Ordering::Acquire) {
+                SPEAKER_VOLUME.load(Ordering::Relaxed)
+            } else {
+                MAC_VOLUME.load(Ordering::Relaxed)
+            };
+            let summary = (playback, id.clone(), shuffle, repeat, level);
             // Between changes the interface runs its own clock; correct it now and then.
             if last_sent.as_ref() == Some(&summary) && sent_at.elapsed() < Duration::from_secs(2) {
                 continue;
@@ -1409,7 +1538,7 @@ impl Client {
                 username: "Apple Music".to_owned(),
                 seek_sequence,
                 track_sequence,
-                volume: u16::MAX,
+                volume: crate::app::percent_to_volume(level),
                 ..Default::default()
             };
             emit(&self.events, &self.waker, Event::Local(Box::new(local)));
@@ -1417,55 +1546,183 @@ impl Client {
     }
 }
 
-// ---- The audio tap ----
+// ---- The sound ----
 
-struct TapSink {
+// Apple's player has no volume or equalizer of its own. So its process is
+// tapped and muted, as Spotifast does for Soloist, and its sound goes on from
+// here: equalizer, visualizers, then this Mac at the app's volume, or a speaker.
+// Nothing is stored: samples only pass through in memory.
+
+unsafe extern "C" {
+    fn am_player_pid() -> i32;
+    fn spotifast_soloist_audio(
+        pid: u32,
+        context: *mut c_void,
+        control: extern "C" fn(*mut c_void) -> u32,
+        process: extern "C" fn(*mut c_void, *mut f32, usize, u32),
+        event: extern "C" fn(*mut c_void, u32),
+    ) -> i32;
+}
+
+/// The rate the visualizers and the speaker read.
+const SHARED_RATE: u32 = 44_100;
+
+static SPEAKER_ON: AtomicBool = AtomicBool::new(false);
+/// The Mac's volume, 0 to 100.
+static MAC_VOLUME: AtomicU8 = AtomicU8::new(100);
+/// The speaker's volume as last set here, 0 to 100.
+static SPEAKER_VOLUME: AtomicU8 = AtomicU8::new(100);
+static ROUTE_STOP: AtomicBool = AtomicBool::new(false);
+
+struct Route {
+    shared: crate::eq::SharedEq,
+    eq: crate::eq::Processor,
+    limiter: crate::limiter::Limiter,
+    resampler: Option<crate::resample::Resampler>,
+    rate: u32,
     tap: Arc<crate::vis::AudioTap>,
-    resampler: std::sync::Mutex<Option<(u32, Option<crate::resample::Resampler>)>>,
 }
 
-/// The rate the visualizers read; see `soloist::audio`.
-const VIS_RATE: u32 = 44_100;
+impl Route {
+    fn new(shared: crate::eq::SharedEq, tap: Arc<crate::vis::AudioTap>) -> Self {
+        let mut route = Self {
+            eq: crate::eq::Processor::new(shared.clone()),
+            shared,
+            limiter: crate::limiter::Limiter::new(f64::from(SHARED_RATE)),
+            resampler: None,
+            rate: SHARED_RATE,
+            tap,
+        };
+        route.reset(SHARED_RATE);
+        route
+    }
 
-extern "C" fn on_audio(context: *mut c_void, samples: *const f32, count: usize, rate: u32) {
-    if samples.is_null() || count == 0 {
-        return;
+    fn reset(&mut self, rate: u32) {
+        self.rate = rate;
+        self.eq = crate::eq::Processor::at_rate(self.shared.clone(), rate);
+        self.limiter = crate::limiter::Limiter::new(f64::from(rate));
+        self.resampler = crate::resample::Resampler::new(rate, SHARED_RATE, 2);
+        self.tap.clear();
     }
-    // SAFETY: `start_tap` leaked the sink for the life of the app.
-    let sink = unsafe { &*context.cast::<TapSink>() };
-    // SAFETY: Swift keeps the buffer alive for the duration of this call.
-    let samples = unsafe { std::slice::from_raw_parts(samples, count) };
-    let mut guard = sink
-        .resampler
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if guard.as_ref().is_none_or(|(known, _)| *known != rate) {
-        *guard = Some((rate, crate::resample::Resampler::new(rate, VIS_RATE, 2)));
-    }
-    let mut resampled = Vec::new();
-    let narrow: &[f32] = match guard.as_mut().and_then(|(_, resampler)| resampler.as_mut()) {
-        Some(resampler) => {
-            resampled.reserve(count * 2);
-            resampler.process_into(samples, &mut resampled);
-            &resampled
+
+    fn process(&mut self, samples: &mut [f32], rate: u32) {
+        if !(8_000..=192_000).contains(&rate) || !samples.len().is_multiple_of(2) {
+            samples.fill(0.0);
+            return;
         }
-        None => samples,
-    };
-    if let Ok(speaker) = SPEAKER.try_lock()
-        && let Some(speaker) = speaker.as_ref()
-    {
-        // SAFETY: the lock keeps the session alive; the slice outlives the call.
-        unsafe { am_airplay_push(speaker.session, narrow.as_ptr(), narrow.len()) };
+        if self.rate != rate {
+            self.reset(rate);
+        }
+        let mut wide: Vec<f64> = samples
+            .iter()
+            .map(|sample| if sample.is_finite() { f64::from(*sample) } else { 0.0 })
+            .collect();
+        self.eq.process(&mut wide);
+        self.limiter.process(&mut wide, 1.0);
+        let narrow: Vec<f32> = wide.iter().map(|sample| *sample as f32).collect();
+        let shared = match &mut self.resampler {
+            Some(resampler) => resampler.process(&narrow),
+            None => narrow.clone(),
+        };
+        let on_speaker = SPEAKER_ON.load(Ordering::Acquire);
+        if on_speaker
+            && let Ok(speaker) = SPEAKER.try_lock()
+            && let Some(speaker) = speaker.as_ref()
+        {
+            // SAFETY: the lock keeps the session alive; the slice outlives the call.
+            unsafe { am_airplay_push(speaker.session, shared.as_ptr(), shared.len()) };
+        }
+        let for_visuals: Vec<f64> = shared.iter().copied().map(f64::from).collect();
+        self.tap.push(&for_visuals, 1.0);
+        if on_speaker {
+            samples.fill(0.0);
+        } else {
+            let gain = (f32::from(MAC_VOLUME.load(Ordering::Relaxed).min(100)) / 100.0).powi(3);
+            for (sample, processed) in samples.iter_mut().zip(narrow) {
+                *sample = processed * gain;
+            }
+        }
     }
-    let wide: Vec<f64> = narrow.iter().copied().map(f64::from).collect();
-    sink.tap.push(&wide, 1.0);
 }
 
-fn start_tap(tap: Arc<crate::vis::AudioTap>) {
-    let sink = Box::leak(Box::new(TapSink {
-        tap,
-        resampler: std::sync::Mutex::new(None),
-    }));
-    // SAFETY: the sink lives for the life of the app, as the bridge requires.
-    unsafe { am_tap_start(std::ptr::from_mut(sink).cast(), on_audio) };
+extern "C" fn route_control(_context: *mut c_void) -> u32 {
+    // Bit 0 stops the route; bit 1 says sound is wanted.
+    u32::from(ROUTE_STOP.load(Ordering::Acquire)) | 2
+}
+
+extern "C" fn route_process(context: *mut c_void, data: *mut f32, count: usize, rate: u32) {
+    // SAFETY: the native worker owns this exclusive buffer and calls serially,
+    // and `run_route` keeps the route alive until the native call returns.
+    let (route, samples) = unsafe {
+        (
+            &mut *context.cast::<Route>(),
+            std::slice::from_raw_parts_mut(data, count),
+        )
+    };
+    let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        route.process(samples, rate);
+    }))
+    .is_err();
+    if failed {
+        samples.fill(0.0);
+        ROUTE_STOP.store(true, Ordering::Release);
+    }
+}
+
+extern "C" fn route_event(context: *mut c_void, event: u32) {
+    match event {
+        1 => log::info!("apple: the player's sound now goes through the app"),
+        2 => {
+            // SAFETY: events and processing run serially on the native worker.
+            let route = unsafe { &mut *context.cast::<Route>() };
+            let rate = route.rate;
+            route.reset(rate);
+        }
+        // Whatever failed, starting over finds the process and device afresh.
+        3 => ROUTE_STOP.store(true, Ordering::Release),
+        _ => {}
+    }
+}
+
+/// Keeps the route on the player's process for the life of the app. The process
+/// comes and goes, and the route restarts when the output device changes.
+fn start_route(shared: crate::eq::SharedEq, tap: Arc<crate::vis::AudioTap>) {
+    std::thread::Builder::new()
+        .name("applebum-route".to_owned())
+        .spawn(move || {
+            loop {
+                // SAFETY: only reads Core Audio's process list.
+                let pid = unsafe { am_player_pid() };
+                if pid <= 0 {
+                    std::thread::sleep(Duration::from_millis(250));
+                    continue;
+                }
+                ROUTE_STOP.store(false, Ordering::Release);
+                let watcher = std::thread::spawn(move || {
+                    while !ROUTE_STOP.load(Ordering::Acquire) {
+                        std::thread::sleep(Duration::from_millis(500));
+                        // SAFETY: as above.
+                        if unsafe { am_player_pid() } != pid {
+                            ROUTE_STOP.store(true, Ordering::Release);
+                        }
+                    }
+                });
+                let mut route = Route::new(shared.clone(), Arc::clone(&tap));
+                // SAFETY: `route` outlives this call, which joins its callbacks.
+                let status = unsafe {
+                    spotifast_soloist_audio(
+                        pid as u32,
+                        std::ptr::from_mut(&mut route).cast(),
+                        route_control,
+                        route_process,
+                        route_event,
+                    )
+                };
+                ROUTE_STOP.store(true, Ordering::Release);
+                let _ = watcher.join();
+                log::info!("apple: the sound route ended ({status}), restarting");
+                std::thread::sleep(Duration::from_millis(300));
+            }
+        })
+        .expect("the route thread starts");
 }

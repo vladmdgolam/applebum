@@ -15,7 +15,7 @@ pub fn on_top_unavailable(locale: crate::i18n::Locale) -> std::borrow::Cow<'stat
 
 /// The download guide, which documents the OpenGL 2.0 requirement and is
 /// the help page the no-window dialog offers.
-pub const DOWNLOAD_PAGE: &str = "https://spotifast.rocks/download/";
+pub const DOWNLOAD_PAGE: &str = "https://github.com/vladmdgolam/applebum#readme";
 
 /// The dialog fastframe-graphics shows when no window could open, in the
 /// interface language: Windows on ARM is pointed at Microsoft's

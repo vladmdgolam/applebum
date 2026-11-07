@@ -303,7 +303,7 @@ impl WinampState {
             [bitmap.width as usize, bitmap.height as usize],
             &bitmap.rgba,
         );
-        let handle = ctx.load_texture("wmp-picture", image, egui::TextureOptions::NEAREST);
+        let handle = ctx.load_texture("wmp-picture", image, egui::TextureOptions::LINEAR);
         let id = handle.id();
         self.wmp_texture_bytes += bitmap.rgba.len();
         self.wmp_textures.insert(

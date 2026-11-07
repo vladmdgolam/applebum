@@ -54,6 +54,8 @@ pub struct EngineConfig {
     /// The saved output, an id or an older build's name (`crate::sink::Saved`).
     pub audio_device: Option<String>,
     pub initial_volume: u16,
+    #[cfg(feature = "apple-music")]
+    pub startup_playlist: Option<String>,
     pub volume_dir: PathBuf,
     pub audio_cache_dir: Option<PathBuf>,
     pub audio_cache_limit: Option<u64>,
@@ -2022,6 +2024,8 @@ mod tests {
             gapless: true,
             audio_device: None,
             initial_volume: 1,
+            #[cfg(feature = "apple-music")]
+            startup_playlist: None,
             volume_dir: PathBuf::new(),
             audio_cache_dir: None,
             audio_cache_limit: None,

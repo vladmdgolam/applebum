@@ -7,7 +7,9 @@ profile="${PROFILE:-release}"
 export LIBCLANG_PATH="$(dirname "$(xcrun --find clang)")/../lib"
 if [ "$profile" = release ]; then cargo build --release; else cargo build; fi
 app="target/$profile/Applebum.app"
-identifier="${BUNDLE_ID:-com.madvanced-research.am-spike}"
+# Your own App ID, with MusicKit enabled. See the README. Kept out of the repo.
+[ -f .applebum.env ] && . ./.applebum.env
+identifier="${BUNDLE_ID:?Set BUNDLE_ID to your App ID, or put BUNDLE_ID=... in .applebum.env. See the README.}"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "target/$profile/spotifast" "$app/Contents/MacOS/Applebum"

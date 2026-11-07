@@ -395,6 +395,12 @@ pub struct Settings {
     /// Screen pixels per skin pixel; `None` picks double size for the
     /// display.
     pub skin_scale: Option<u8>,
+    /// The player's size on top of that, from the View menu: 1 is as the skin
+    /// was drawn, and anything between 0.5 and 3 can be chosen.
+    pub skin_zoom: f32,
+    /// The library playlist waiting in the player at launch, by name. Without
+    /// one, the last song played.
+    pub startup_playlist: Option<String>,
     /// The Winamp window stays above other windows.
     pub winamp_on_top: bool,
     /// The mini player's visualiser: bars, scope, or off.
@@ -548,6 +554,8 @@ impl Default for Settings {
             skin: if cfg!(test) { Some(crate::skin::WIDE.to_owned()) } else { None },
             random_skin: false,
             skin_scale: None,
+            skin_zoom: 1.0,
+            startup_playlist: None,
             winamp_on_top: false,
             vis: VisMode::default(),
             playlist_open: false,

@@ -64,7 +64,7 @@ impl<'a> RowText<'a> {
 }
 
 /// The guide to writing a palette file for the themes folder.
-const THEMES_GUIDE_URL: &str = "https://spotifast.rocks/settings-and-files/#custom-themes";
+const THEMES_GUIDE_URL: &str = "https://github.com/vladmdgolam/applebum#readme";
 /// Saving the equalizer as a named preset, and deleting the saved preset
 /// that is in use (#702).
 fn eq_preset_controls(app: &mut App, ui: &mut egui::Ui, current: Option<&str>) {
@@ -683,7 +683,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     .clicked()
                 {
                     app.actions.push(Action::OpenUrl(
-                        "https://spotifast.rocks/getting-started/#make-a-spotify-app".into(),
+                        "https://github.com/vladmdgolam/applebum#readme".into(),
                     ));
                 }
             });
@@ -3051,7 +3051,7 @@ mod tests {
         assert_eq!(
             RELEASE_NOTES_URL,
             format!(
-                "https://github.com/crmne/spotifast/releases/tag/v{}",
+                "https://github.com/vladmdgolam/applebum/releases/tag/v{}",
                 env!("CARGO_PKG_VERSION")
             )
         );

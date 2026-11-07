@@ -392,9 +392,9 @@ fn central(app: &mut App, ui: &mut egui::Ui) {
 }
 
 /// Where the "Why?" link of the slow-app banner leads.
-const SLOW_BANNER_GUIDE: &str = "https://spotifast.rocks/troubleshooting/#rate-limits";
+const SLOW_BANNER_GUIDE: &str = "https://github.com/vladmdgolam/applebum#readme";
 /// Where the "Why?" link of the audio-key banner leads.
-pub const AUDIO_KEY_GUIDE: &str = "https://spotifast.rocks/troubleshooting/#audio-key";
+pub const AUDIO_KEY_GUIDE: &str = "https://github.com/vladmdgolam/applebum#readme";
 
 /// A strip under the top bar suggesting a personal app, after Spotify
 /// told the shared app, which only listeners signed in before 0.14.2 still

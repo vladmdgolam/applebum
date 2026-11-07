@@ -91,7 +91,7 @@ struct API_AVAILABLE(macos(14.2)) Route {
         if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, sizeof pid, &pid, &size, &process) || !process)
             return false; // Soloist has not opened its audio device yet.
         description = [[CATapDescription alloc] initStereoMixdownOfProcesses:@[@(process)]];
-        description.name = @"Spotifast Soloist";
+        description.name = @"Applebum";
         description.privateTap = YES;
         // Waiting for permission must not silence ordinary playback.
         description.muteBehavior = CATapUnmuted;
@@ -103,7 +103,7 @@ struct API_AVAILABLE(macos(14.2)) Route {
             || format.mSampleRate < 8000 || format.mSampleRate > 192000)
             throw static_cast<OSStatus>(kAudioHardwareUnsupportedOperationError);
         output = get<AudioObjectID>(kAudioObjectSystemObject, kAudioHardwarePropertyDefaultOutputDevice);
-        NSDictionary *aggregate = @{@kAudioAggregateDeviceNameKey:@"Spotifast Soloist (private)",
+        NSDictionary *aggregate = @{@kAudioAggregateDeviceNameKey:@"Applebum (private)",
             @kAudioAggregateDeviceUIDKey:NSUUID.UUID.UUIDString, @kAudioAggregateDeviceIsPrivateKey:@YES,
             @kAudioAggregateDeviceTapAutoStartKey:@YES,
             @kAudioAggregateDeviceTapListKey:@[@{@kAudioSubTapUIDKey:description.UUID.UUIDString,

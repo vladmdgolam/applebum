@@ -91,7 +91,7 @@ pub fn window_size(settings: &crate::settings::Settings, unit: f32) -> Vec2 {
 /// A first guess at the window's size, before the display's scale is
 /// known; the first frame corrects it.
 pub fn initial_size(settings: &crate::settings::Settings, skin: &Skin) -> Vec2 {
-    let unit = WinampState::scale(settings, 1.0, skin) as f32;
+    let unit = settings.skin_zoom * WinampState::scale(settings, 1.0, skin) as f32;
     match &skin.wmp {
         Some(wmp) => vec2(wmp.width as f32, wmp.height as f32) * unit,
         None => window_size(settings, unit),
@@ -114,7 +114,7 @@ pub fn dropped_skins(ctx: &egui::Context) -> Vec<PathBuf> {
 /// Logical points per skin pixel: a whole number of screen pixels.
 fn unit(app: &App, ctx: &egui::Context) -> f32 {
     let pixels_per_point = ctx.pixels_per_point();
-    WinampState::scale(&app.settings, pixels_per_point, &app.winamp.skin) as f32 / pixels_per_point
+    app.skin_zoom_shown * WinampState::scale(&app.settings, pixels_per_point, &app.winamp.skin) as f32 / pixels_per_point
 }
 
 /// Fits the window to the skin after the display scale is known.

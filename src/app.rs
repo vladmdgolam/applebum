@@ -529,6 +529,10 @@ pub struct App {
     /// What a new window takes up from `page_scroll` on its first frame.
     pub restore_scroll: Option<(String, f32)>,
     pub devices: Vec<Device>,
+    /// The player's size right now, on its way to `settings.skin_zoom`.
+    pub skin_zoom_shown: f32,
+    /// The size the View menu's slider was last told about.
+    skin_zoom_in_menu: f32,
     /// What the Output menu shows: each output's id, name, and whether it's on.
     output_menu: Vec<(String, String, bool)>,
     /// Receivers seen on the local network. Spotify lists a receiver only
@@ -936,6 +940,9 @@ fn media_app() -> fastframe_now_playing::App {
     app
 }
 
+pub const SKIN_ZOOM_MIN: f32 = 0.5;
+pub const SKIN_ZOOM_MAX: f32 = 3.0;
+
 const TRAY_SHOW: &str = "show";
 const TRAY_MAIN_WINDOW: &str = "main-window";
 const TRAY_PLAY_PAUSE: &str = "play-pause";
@@ -1119,6 +1126,7 @@ impl App {
         // settings beside it until migration binds that password in the store.
         settings.proxy_password_legacy |= dirs.proxy_secret_file().try_exists().unwrap_or(true);
         let plays = crate::history::History::load(&dirs.history_file());
+        let skin_zoom_shown = settings.skin_zoom;
         let tap = crate::vis::AudioTap::new();
         let eq = crate::eq::shared();
         if let Ok(mut shared) = eq.lock() {
@@ -1297,6 +1305,8 @@ impl App {
             page_scroll: None,
             restore_scroll: None,
             devices: Vec::new(),
+            skin_zoom_shown,
+            skin_zoom_in_menu: 0.0,
             output_menu: Vec::new(),
             receivers: Vec::new(),
             device_history: session.device_history.clone(),
@@ -4631,6 +4641,7 @@ impl App {
             }
             #[cfg(feature = "apple-music")]
             self.sync_output_menu();
+            self.ease_skin_zoom(ctx);
             // A Windows Media Player skin has its own drawer, which this setting
             // doesn't track, so the skin window always keeps the queue fresh.
             let playlist_open = self.settings.winamp_window;
@@ -5090,7 +5101,27 @@ impl App {
             Some(now) if now.position_ms > 0 && !now.resuming => PlayState::Paused,
             _ => PlayState::Stopped,
         };
-        let mut queue: Vec<Song> = song.iter().cloned().collect();
+        // Songs already passed stay in the list, above the one on.
+        #[cfg(feature = "apple-music")]
+        let played: Vec<Song> = if song.is_some() {
+            crate::apple::played_songs()
+                .into_iter()
+                .map(|played| Song {
+                    title: played.title,
+                    artist: played.artist,
+                    album: String::new(),
+                    uri: played.uri,
+                    duration_s: played.duration_s,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        #[cfg(not(feature = "apple-music"))]
+        let played: Vec<Song> = Vec::new();
+        let playing_row = song.as_ref().map(|_| played.len());
+        let mut queue: Vec<Song> = played;
+        queue.extend(song.iter().cloned());
         if let Some(fetched) = self.queue.get() {
             queue.extend(fetched.queue.iter().map(|item| Song {
                 title: item.name().to_owned(),
@@ -5127,7 +5158,7 @@ impl App {
                 .as_ref()
                 .is_some_and(|now| now.repeat != crate::player::RepeatMode::Off),
             can_control: now.as_ref().is_none_or(|now| now.can_control),
-            playing: song.as_ref().map(|_| 0),
+            playing: playing_row,
             song,
             queue,
             eq_on: self.settings.eq_on,
@@ -5282,14 +5313,20 @@ impl App {
                 crate::player::RepeatMode::Off
             })),
             Command::PlayQueued(row) => {
-                // The first row is what is on already.
-                if row > 0
+                let on = deck.playing.unwrap_or(0);
+                // A row above the song on was already passed: go back to it.
+                #[cfg(feature = "apple-music")]
+                if row < on {
+                    crate::apple::jump(row as i32 - on as i32);
+                }
+                // The song's own row is what is on already.
+                if row > on
                     && let Some(song) = deck.queue.get(row)
                 {
                     self.actions.push(Action::PlayFromRow {
                         context: crate::model::RowContext::Queue,
                         uri: song.uri.clone(),
-                        index: (row - 1) as u32,
+                        index: (row - on - 1) as u32,
                     });
                 }
             }
@@ -7264,6 +7301,26 @@ impl App {
         self.backend.api(ApiRequest::PlaybackState {
             seq: self.remote_poll_seq,
         });
+    }
+
+    /// Moves the player's size toward the one chosen, the way the Dock resizes:
+    /// a fixed share of the way each moment, so it settles rather than stops.
+    fn ease_skin_zoom(&mut self, ctx: &egui::Context) {
+        let target = self.settings.skin_zoom;
+        if target != self.skin_zoom_in_menu {
+            crate::mac_menu::set_skin_zoom(target);
+            self.skin_zoom_in_menu = target;
+        }
+        let gap = target - self.skin_zoom_shown;
+        if gap == 0.0 {
+            return;
+        }
+        let share = 1.0 - (-14.0 * ctx.input(|input| input.stable_dt)).exp();
+        self.skin_zoom_shown += gap * share;
+        if (target - self.skin_zoom_shown).abs() < 0.002 {
+            self.skin_zoom_shown = target;
+        }
+        ctx.request_repaint();
     }
 
     /// The output in this row of the Output menu.
@@ -13860,6 +13917,10 @@ impl App {
             Action::InstallSkin(path) => {
                 self.winamp.install(path, &self.dirs.skins_dir(), ctx);
             }
+            Action::SetSkinZoom(zoom) => {
+                self.settings.skin_zoom = zoom.clamp(SKIN_ZOOM_MIN, SKIN_ZOOM_MAX);
+                self.settings_dirty = true;
+            }
             Action::SetSkinScale(scale) => {
                 self.settings.skin_scale = Some(scale);
                 self.settings_dirty = true;
@@ -15257,6 +15318,8 @@ pub fn engine_config(
             .clone()
             .filter(|device| !device.trim().is_empty()),
         initial_volume: settings.volume,
+        #[cfg(feature = "apple-music")]
+        startup_playlist: settings.startup_playlist.clone(),
         volume_dir: dirs.volume_dir(),
         audio_cache_dir: settings.audio_cache.then(|| dirs.audio_cache_dir()),
         audio_cache_limit: Some(settings.audio_cache_mb.max(64) * 1024 * 1024),
@@ -28969,7 +29032,7 @@ mod tests {
                 manual,
                 result: Ok(Some(crate::updates::Release {
                     version: "1.2.3".into(),
-                    url: "https://github.com/crmne/spotifast/releases/tag/v1.2.3".into(),
+                    url: "https://github.com/vladmdgolam/applebum/releases/tag/v1.2.3".into(),
                 })),
             }]);
             let ctx = egui::Context::default();
@@ -28986,7 +29049,7 @@ mod tests {
         let mut app = headless_app();
         app.update = Some(crate::updates::Release {
             version: "1.2.3".into(),
-            url: "https://github.com/crmne/spotifast/releases/tag/v1.2.3".into(),
+            url: "https://github.com/vladmdgolam/applebum/releases/tag/v1.2.3".into(),
         });
         app.update_checking = true;
         app.handle_backend_events(vec![Event::UpdateChecked {
@@ -29037,7 +29100,7 @@ mod tests {
             manual: false,
             result: Ok(Some(crate::updates::Release {
                 version: "1.2.3".into(),
-                url: "https://github.com/crmne/spotifast/releases/tag/v1.2.3".into(),
+                url: "https://github.com/vladmdgolam/applebum/releases/tag/v1.2.3".into(),
             })),
         }]);
 

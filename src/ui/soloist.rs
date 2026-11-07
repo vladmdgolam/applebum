@@ -15,7 +15,7 @@ use crate::{
 use egui::{Align, CornerRadius, Frame, Layout, Margin, Stroke, Vec2};
 use std::{borrow::Cow, time::Duration};
 
-const GUIDE_URL: &str = "https://spotifast.rocks/soloist/";
+const GUIDE_URL: &str = "https://github.com/vladmdgolam/applebum#readme";
 const KEY_URL: &str = "https://developer.spotify.com/dashboard/soloist";
 /// The card's width, as wide as the sign-in card with a little more to say.
 const CARD: f32 = 460.0;

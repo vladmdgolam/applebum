@@ -1427,6 +1427,8 @@ pub enum Action {
     InstallSkin(std::path::PathBuf),
     /// Screen pixels per skin pixel in the Winamp window.
     SetSkinScale(u8),
+    /// The player's size from the View menu, eased to rather than jumped to.
+    SetSkinZoom(f32),
     ToggleWinampOnTop,
     SetWinampTaskbar(bool),
     /// Windows: draw Spotifast's own title bar instead of the standard one.
