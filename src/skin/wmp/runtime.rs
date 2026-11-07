@@ -798,6 +798,14 @@ impl Runtime {
     }
 
     /// The tooltip and cursor of what is under the pointer.
+    /// Whether a skin pixel of this view takes a click: false over its clear parts.
+    pub fn solid_at(&mut self, key: u32, x: f64, y: f64) -> bool {
+        let Some(index) = self.index_of(key) else {
+            return true;
+        };
+        paint::hit(&self.views[index].state, &mut self.images, &*self.shared.measure, x, y).is_some()
+    }
+
     pub fn hover_info(&self, key: u32) -> (Option<String>, Option<String>) {
         let Some(view) = self.view(key) else {
             return (None, None);

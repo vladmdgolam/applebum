@@ -44,9 +44,57 @@ fn fit_view(ctx: &egui::Context, wanted: egui::Vec2) {
         return;
     }
     ctx.data_mut(|data| data.insert_temp(id, Fit { wanted, at: now }));
-    ctx.send_viewport_cmd(ViewportCommand::MinInnerSize(wanted));
-    ctx.send_viewport_cmd(ViewportCommand::MaxInnerSize(wanted));
+    // Growing, the ceiling moves first; shrinking, the floor does. The other
+    // order asks for a minimum above the maximum, which the window refuses
+    // until something else makes it lay out again.
+    if wanted.x >= current.x || wanted.y >= current.y {
+        ctx.send_viewport_cmd(ViewportCommand::MaxInnerSize(wanted));
+        ctx.send_viewport_cmd(ViewportCommand::MinInnerSize(wanted));
+    } else {
+        ctx.send_viewport_cmd(ViewportCommand::MinInnerSize(wanted));
+        ctx.send_viewport_cmd(ViewportCommand::MaxInnerSize(wanted));
+    }
     ctx.send_viewport_cmd(ViewportCommand::InnerSize(wanted));
+    ctx.request_repaint();
+}
+
+/// Lets clicks through the skin's see-through parts to the windows beneath, as a
+/// shaped window should. A window that passes the mouse through no longer hears
+/// it, so the pointer is followed from the screen while it does.
+#[cfg(target_os = "macos")]
+fn pass_through_clear_parts(ctx: &egui::Context, runtime: &mut Runtime, key: u32, origin: Pos2, unit: f32) {
+    use objc2_app_kit::{NSEvent, NSScreen};
+    let id = Id::new(("wmp-pass-through", key));
+    let passing: bool = ctx.data(|data| data.get_temp(id)).unwrap_or(false);
+    let held = ctx.input(|input| input.pointer.any_down());
+    let wanted = if held || egui::Popup::is_any_open(ctx) {
+        false
+    } else {
+        let Some(inner) = ctx.input(|input| input.viewport().inner_rect) else {
+            return;
+        };
+        let Some(mtm) = objc2::MainThreadMarker::new() else {
+            return;
+        };
+        let screens = NSScreen::screens(mtm);
+        let Some(primary) = screens.iter().next() else {
+            return;
+        };
+        // The screen counts up from the bottom; the window's rectangle from the top.
+        let height = primary.frame().size.height;
+        let pointer = NSEvent::mouseLocation();
+        let at = egui::pos2(pointer.x as f32, (height - pointer.y) as f32);
+        let local = at - inner.min - origin.to_vec2();
+        let (x, y) = (f64::from(local.x / unit), f64::from(local.y / unit));
+        inner.contains(at) && !runtime.solid_at(key, x, y)
+    };
+    if wanted != passing {
+        ctx.data_mut(|data| data.insert_temp(id, wanted));
+        ctx.send_viewport_cmd(ViewportCommand::MousePassthrough(wanted));
+    }
+    if wanted {
+        ctx.request_repaint_after(std::time::Duration::from_millis(40));
+    }
 }
 
 /// The whole mini player, with every window of the skin.
@@ -196,9 +244,18 @@ fn draw_view(app: &mut App, runtime: &mut Runtime, ui: &mut Ui, key: u32, primar
     {
         ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
     }
+    // At the pointer: the area hovered is the whole window, and a tooltip under
+    // it would sit at the window's bottom corner.
     if let Some(tip) = tip {
-        background.on_hover_text(tip);
+        egui::Tooltip::for_widget(&background)
+            .at_pointer()
+            .gap(12.0)
+            .show(|ui| {
+                ui.label(tip);
+            });
     }
+    #[cfg(target_os = "macos")]
+    pass_through_clear_parts(&ctx, runtime, key, origin, unit);
 
     if moving {
         crate::theme::visualiser_frame(&ctx, app.visualiser_fps());
